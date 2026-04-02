@@ -1,0 +1,412 @@
+﻿"use client";
+
+import { useState, useRef } from "react";
+
+type TabName = "upload" | "detail" | "report";
+
+interface Student {
+  id: string;
+  name: string;
+  images: File[];
+  imageUrls: string[];
+  ocrText: string;
+  essayDetail: any | null;
+  report: string;
+  status: "idle" | "grading" | "done" | "error";
+}
+
+const PRIMARY = "#2c3e6b";
+const RED = "#c0392b";
+const GREEN = "#27ae60";
+const BG = "#faf8f5";
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+export default function Home() {
+  const [tab, setTab] = useState<TabName>("upload");
+  const [students, setStudents] = useState<Student[]>([]);
+  const [activeStudentId, setActiveStudentId] = useState("");
+  const [grade, setGrade] = useState("涓夊勾绾т笅");
+  const [topic, setTopic] = useState("涓崕浼犵粺鑺傛棩");
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [stepText, setStepText] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
+  const [newName, setNewName] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const addFileInputRef = useRef<HTMLInputElement>(null);
+  const activeStudent = students.find((s) => s.id === activeStudentId) || null;
+
+  function addStudent() {
+    if (!newName.trim()) { alert("璇疯緭鍏ュ鐢熷鍚?); return; }
+    const s: Student = { id: uid(), name: newName.trim(), images: [], imageUrls: [], ocrText: "", essayDetail: null, report: "", status: "idle" };
+    setStudents((prev) => [...prev, s]);
+    setActiveStudentId(s.id);
+    setNewName("");
+  }
+
+  function removeStudent(id: string) {
+    setStudents((prev) => {
+      const removed = prev.find((s) => s.id === id);
+      removed?.imageUrls.forEach((u) => URL.revokeObjectURL(u));
+      return prev.filter((s) => s.id !== id);
+    });
+    if (activeStudentId === id) setActiveStudentId(students.find((s) => s.id !== id)?.id || "");
+  }
+
+  function onPickImages(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0 || !activeStudentId) return;
+    setStudents((prev) =>
+      prev.map((s) => {
+        if (s.id !== activeStudentId) return s;
+        return { ...s, images: [...s.images, ...files], imageUrls: [...s.imageUrls, ...files.map((f) => URL.createObjectURL(f))] };
+      })
+    );
+    e.target.value = "";
+  }
+
+  function removeImage(studentId: string, idx: number) {
+    setStudents((prev) =>
+      prev.map((s) => {
+        if (s.id !== studentId) return s;
+        URL.revokeObjectURL(s.imageUrls[idx]);
+        return { ...s, images: s.images.filter((_, i) => i !== idx), imageUrls: s.imageUrls.filter((_, i) => i !== idx) };
+      })
+    );
+  }
+
+  function updateStudent(id: string, data: Partial<Student>) {
+    setStudents((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
+  }
+
+  async function runGrading() {
+    if (!activeStudent || activeStudent.images.length === 0) { alert("璇峰厛涓婁紶浣滀笟鐓х墖"); return; }
+    setLoading(true); setProgress(0);
+    updateStudent(activeStudentId, { status: "grading" });
+    try {
+      setStepText("姝ｅ湪璇嗗埆鎵嬪啓鍐呭..."); setProgress(10);
+      const formData = new FormData();
+      activeStudent.images.forEach((f) => formData.append("images", f));
+      const ocrRes = await fetch("/api/ocr", { method: "POST", body: formData });
+      if (!ocrRes.ok) throw new Error("OCR 璇嗗埆澶辫触");
+      const { ocrText } = await ocrRes.json();
+      updateStudent(activeStudentId, { ocrText });
+      setProgress(35);
+
+      setStepText("姝ｅ湪浣滄枃绮炬壒..."); setProgress(45);
+      const essayRes = await fetch("/api/essay-detail", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ocrText, gradeInfo: `${grade} ${topic}` }),
+      });
+      if (!essayRes.ok) throw new Error("浣滄枃绮炬壒澶辫触");
+      const essayDetail = await essayRes.json();
+      updateStudent(activeStudentId, { essayDetail });
+      setProgress(70);
+
+      setStepText("姝ｅ湪鐢熸垚鎶ュ憡..."); setProgress(80);
+      const reportRes = await fetch("/api/report", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ essayDetail }),
+      });
+      if (!reportRes.ok) throw new Error("鎶ュ憡鐢熸垚澶辫触");
+      const { report } = await reportRes.json();
+      updateStudent(activeStudentId, { report, status: "done" });
+      setProgress(100); setStepText("鎵规敼瀹屾垚锛?);
+      setTab("detail");
+    } catch (err: any) {
+      alert("鎵规敼鍑洪敊锛? + err.message);
+      updateStudent(activeStudentId, { status: "error" });
+    } finally { setLoading(false); }
+  }
+
+  function downloadReport() {
+    if (!activeStudent?.report) return;
+    const blob = new Blob([activeStudent.report], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "鎵规敼鎶ュ憡_" + activeStudent.name + "_" + new Date().toLocaleDateString("zh-CN") + ".txt";
+    a.click();
+  }
+
+  function tabStyle(t: TabName) {
+    return {
+      padding: "10px 24px", border: "none", borderRadius: "8px 8px 0 0", cursor: "pointer" as const,
+      fontWeight: 600 as const, fontSize: "15px",
+      background: tab === t ? "#fff" : "transparent", color: tab === t ? PRIMARY : "#999",
+      borderBottom: tab === t ? "2px solid " + PRIMARY : "2px solid transparent",
+    };
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Noto Sans SC','Microsoft YaHei',sans-serif", color: "#333" }}>
+
+      {previewUrl && (
+        <div onClick={() => setPreviewUrl(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
+          <button onClick={() => setPreviewUrl(null)}
+            style={{ position: "absolute", top: 20, right: 20, width: 44, height: 44, borderRadius: "50%", background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>鉁?/button>
+          <img src={previewUrl} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", objectFit: "contain", borderRadius: 8 }} />
+        </div>
+      )}
+
+      <div style={{ background: "linear-gradient(135deg, " + PRIMARY + ", #1a2744)", padding: "18px 32px", color: "#fff" }}>
+        <h1 style={{ margin: 0, fontSize: "22px", fontWeight: 700, letterSpacing: 2 }}>璇枃浣滀笟鏅鸿兘鎵规敼</h1>
+        <p style={{ margin: "4px 0 0", fontSize: "13px", opacity: 0.7 }}>涓婁紶鐓х墖 鈫?OCR璇嗗埆 鈫?浣滄枃绮炬壒 鈫?鎶ュ憡</p>
+      </div>
+
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "16px 24px" }}>
+        <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #e0e0e0", marginBottom: 20 }}>
+          <button style={tabStyle("upload")} onClick={() => setTab("upload")}>馃摛 涓婁紶浣滀笟</button>
+          <button style={tabStyle("detail")} onClick={() => setTab("detail")}>馃摑 鎵规敼璇︽儏</button>
+          <button style={tabStyle("report")} onClick={() => setTab("report")}>馃搳 鎵规敼鎶ュ憡</button>
+        </div>
+
+        {tab === "upload" && (
+          <div style={{ display: "flex", gap: "16px" }}>
+            <div style={{ width: "250px", flexShrink: 0, paddingRight: "24px", borderRight: "1px solid #eee" }}>
+              <h3 style={{ fontSize: "15px", fontWeight: 600, marginBottom: "12px", color: "#555" }}>瀛︾敓鍒楄〃</h3>
+              <div style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
+                <input value={newName} onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addStudent()} placeholder="杈撳叆瀛︾敓濮撳悕"
+                  style={{ flex: 1, padding: "8px 10px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "13px", outline: "none" }} />
+                <button onClick={addStudent}
+                  style={{ padding: "8px 10px", borderRadius: "6px", border: "none", background: PRIMARY, color: "#fff", fontSize: "13px", cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>
+                  娣诲姞
+                </button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {students.length === 0 && <p style={{ fontSize: "13px", color: "#bbb", textAlign: "center", padding: "20px 0" }}>璇峰厛娣诲姞瀛︾敓</p>}
+                {students.map((s) => (
+                  <div key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }}
+                    style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "10px 12px", borderRadius: "8px", cursor: "pointer",
+                      background: activeStudentId === s.id ? PRIMARY : "#fff",
+                      color: activeStudentId === s.id ? "#fff" : "#333",
+                      border: activeStudentId === s.id ? "none" : "1px solid #eee",
+                    }}>
+                    <div>
+                      <span style={{ fontWeight: 600, fontSize: "14px" }}>{s.name}</span>
+                      <span style={{
+                        marginLeft: "8px", fontSize: "11px", padding: "2px 6px", borderRadius: "4px",
+                        background: s.status === "done" ? GREEN : s.status === "error" ? RED : "#eee",
+                        color: s.status === "idle" ? "#999" : "#fff",
+                      }}>
+                        {s.status === "done" ? "宸叉壒鏀? : s.status === "error" ? "鍑洪敊" : s.images.length + "寮?}
+                      </span>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); removeStudent(s.id); }}
+                      style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "rgba(255,255,255,0.6)" : "#ccc", fontSize: "16px" }}>鉁?/button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ flex: 1, paddingLeft: "8px" }}>
+              {!activeStudent ? (
+                <div style={{ textAlign: "center", padding: "80px 0", color: "#bbb" }}>
+                  <p style={{ fontSize: "40px" }}>馃憟</p>
+                  <p>璇峰厛鍦ㄥ乏渚ф坊鍔犲鐢?/p>
+                </div>
+              ) : (
+                <>
+                  <h3 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "16px" }}>{activeStudent.name} 鐨勪綔涓?/h3>
+
+                  <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "24px" }}>
+                    {activeStudent.imageUrls.map((url, i) => (
+                      <div key={i} onClick={() => setPreviewUrl(url)}
+                        style={{ width: "120px", height: "160px", borderRadius: "8px", overflow: "hidden", border: "1px solid #ddd", position: "relative", cursor: "pointer", flexShrink: 0 }}>
+                        <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <button onClick={(e) => { e.stopPropagation(); removeImage(activeStudent.id, i); }}
+                          style={{ position: "absolute", top: "4px", right: "4px", width: "22px", height: "22px", borderRadius: "50%", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", cursor: "pointer", fontSize: "12px", display: "flex", alignItems: "center", justifyContent: "center" }}>鉁?/button>
+                        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: "11px", textAlign: "center", padding: "3px" }}>{"绗? + (i + 1) + "椤?}</div>
+                      </div>
+                    ))}
+                    <div onClick={() => addFileInputRef.current?.click()}
+                      style={{ width: "120px", height: "160px", borderRadius: "8px", border: "2px dashed #ccc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fff", color: "#bbb", flexShrink: 0 }}>
+                      <span style={{ fontSize: "32px", lineHeight: 1 }}>+</span>
+                      <span style={{ fontSize: "12px", marginTop: "4px" }}>娣诲姞鐓х墖</span>
+                      <input ref={addFileInputRef} type="file" accept="image/*" multiple onChange={onPickImages} style={{ display: "none" }} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "16px", marginBottom: "16px" }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: "13px", fontWeight: 600, color: "#666", display: "block", marginBottom: "6px" }}>骞寸骇</label>
+                      <select value={grade} onChange={(e) => setGrade(e.target.value)}
+                        style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "14px" }}>
+                        {["涓€骞寸骇涓?,"涓€骞寸骇涓?,"浜屽勾绾т笂","浜屽勾绾т笅","涓夊勾绾т笂","涓夊勾绾т笅","鍥涘勾绾т笂","鍥涘勾绾т笅","浜斿勾绾т笂","浜斿勾绾т笅","鍏勾绾т笂","鍏勾绾т笅"].map(g => <option key={g}>{g}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: "13px", fontWeight: 600, color: "#666", display: "block", marginBottom: "6px" }}>涓婚</label>
+                      <select value={topic} onChange={(e) => setTopic(e.target.value)}
+                        style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "14px" }}>
+                        {["鐪嬪浘鍐欒瘽","鍐欎汉","璁颁簨","鍐欐櫙","鐘剁墿","鎯宠薄浣滄枃","鏃ヨ","涔︿俊","璇诲悗鎰?,"涓崕浼犵粺鑺傛棩","鑷敱鍛介","鍏朵粬"].map(t => <option key={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: "20px" }}>
+                    <label style={{ fontSize: "13px", fontWeight: 600, color: "#666", display: "block", marginBottom: "6px" }}>鍙傝€冪瓟妗堬紙鍙€夛級</label>
+                    <textarea placeholder="鍙矘璐存爣鍑嗙瓟妗堬紝甯姪鏇寸簿纭壒鏀?
+                      style={{ width: "100%", minHeight: "60px", padding: "10px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "14px", resize: "vertical", boxSizing: "border-box" }} />
+                  </div>
+
+                  <button disabled={activeStudent.images.length === 0 || loading} onClick={runGrading}
+                    style={{
+                      width: "100%", padding: "14px", borderRadius: "10px", border: "none",
+                      fontSize: "16px", fontWeight: 700, color: "#fff", letterSpacing: "2px",
+                      cursor: activeStudent.images.length === 0 || loading ? "not-allowed" : "pointer",
+                      background: activeStudent.images.length === 0 || loading ? "#ccc" : PRIMARY,
+                    }}>
+                    {loading ? stepText : "寮€濮嬫壒鏀癸紙" + activeStudent.images.length + " 寮犵収鐗囷級"}
+                  </button>
+
+                  {loading && (
+                    <div style={{ marginTop: "12px" }}>
+                      <div style={{ width: "100%", height: "6px", borderRadius: "3px", background: "#eee" }}>
+                        <div style={{ width: progress + "%", height: "100%", borderRadius: "3px", background: PRIMARY, transition: "width 0.5s" }} />
+                      </div>
+                      <p style={{ fontSize: "12px", color: "#888", textAlign: "center", marginTop: "6px" }}>{progress}% 鈥?{stepText}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {tab === "detail" && (
+          <div>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+              {students.filter(s => s.status === "done").map(s => (
+                <button key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }}
+                  style={{ padding: "6px 16px", borderRadius: "6px", border: "none", cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#eee", color: activeStudentId === s.id ? "#fff" : "#666", fontWeight: 600, fontSize: "13px" }}>
+                  {s.name}
+                </button>
+              ))}
+              {students.filter(s => s.status === "done").length === 0 && <p style={{ color: "#bbb", fontSize: "14px" }}>杩樻病鏈夋壒鏀瑰畬鎴愮殑瀛︾敓</p>}
+            </div>
+
+            {activeStudent?.status === "done" && (
+              <div style={{ display: "flex", gap: "20px", height: "calc(100vh - 180px)" }}>
+                <div style={{ flex: "0 0 55%", background: "#fff", borderRadius: "12px", overflow: "auto", padding: "12px", border: "1px solid #eee" }}>
+                  {activeStudent.imageUrls[pageIndex] && (
+                    <img src={activeStudent.imageUrls[pageIndex]} alt="" style={{ width: "100%", display: "block", cursor: "zoom-in" }}
+                      onClick={() => setPreviewUrl(activeStudent.imageUrls[pageIndex])} />
+                  )}
+                  {activeStudent.images.length > 1 && (
+                    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "12px", padding: "10px 0" }}>
+                      <button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)}
+                        style={{ padding: "6px 16px", borderRadius: "6px", border: "1px solid #ddd", cursor: "pointer", background: "#fff" }}>鈫?涓婁竴椤?/button>
+                      <span style={{ fontSize: "14px", color: "#666" }}>{"绗?" + (pageIndex + 1) + " / " + activeStudent.images.length + " 椤?}</span>
+                      <button disabled={pageIndex >= activeStudent.images.length - 1} onClick={() => setPageIndex(i => i + 1)}
+                        style={{ padding: "6px 16px", borderRadius: "6px", border: "1px solid #ddd", cursor: "pointer", background: "#fff" }}>涓嬩竴椤?鈫?/button>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ flex: "0 0 43%", overflow: "auto", paddingRight: "4px" }}>
+                  {activeStudent.essayDetail ? (
+                    <>
+                      {activeStudent.essayDetail.dimensions && (
+                        <div style={{ marginBottom: "16px" }}>
+                          <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "10px" }}>馃搳 鍥涚淮璇勪环</h3>
+                          {Object.entries(activeStudent.essayDetail.dimensions as Record<string, string>).map(([key, val]) => {
+                            const labels: Record<string, string> = { content: "鍐呭", structure: "缁撴瀯", language: "璇█", writing: "涔﹀啓" };
+                            return (
+                              <div key={key} style={{ background: "#fff", borderRadius: "8px", padding: "12px", marginBottom: "8px", border: "1px solid #eee" }}>
+                                <p style={{ fontSize: "14px", fontWeight: 700, marginBottom: "4px", color: PRIMARY }}>{labels[key] || key}</p>
+                                <p style={{ fontSize: "13px", lineHeight: 1.7, margin: 0, color: "#555" }}>{val}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div style={{ marginBottom: "16px" }}>
+                        <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "10px", color: GREEN }}>馃専 涓夊ぇ浜偣</h3>
+                        {(activeStudent.essayDetail.highlights || []).map((h: any, i: number) => (
+                          <div key={i} style={{ background: "#edf9f1", borderRadius: "8px", padding: "14px", marginBottom: "8px", borderLeft: "3px solid " + GREEN }}>
+                            <p style={{ fontWeight: 700, fontSize: "14px", color: GREEN, marginBottom: "4px" }}>{(i + 1) + ". " + h.title}</p>
+                            <p style={{ fontSize: "13px", lineHeight: 1.8, margin: 0, color: "#444" }}>{h.description}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ marginBottom: "16px" }}>
+                        <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "10px", color: RED }}>鉁忥笍 浜斿淇敼寤鸿</h3>
+                        {(activeStudent.essayDetail.corrections || []).map((c: any, i: number) => (
+                          <div key={i} style={{ background: "#fff", borderRadius: "8px", padding: "14px", marginBottom: "10px", border: "1px solid #eee" }}>
+                            <span style={{ fontSize: "12px", fontWeight: 700, padding: "3px 10px", borderRadius: "4px", background: RED, color: "#fff" }}>
+                              {"淇敼 " + (i + 1) + " 路 " + c.paragraph}
+                            </span>
+                            <p style={{ fontSize: "12px", color: "#999", margin: "6px 0" }}>{c.location}</p>
+                            <div style={{ padding: "8px 12px", borderRadius: "6px", background: "#fef2f2", marginBottom: "8px" }}>
+                              <span style={{ fontSize: "12px", fontWeight: 600, color: RED }}>馃搷 鍘熸枃锛?/span>
+                              <span style={{ fontSize: "13px" }}>{c.original}</span>
+                            </div>
+                            <div style={{ padding: "8px 12px", borderRadius: "6px", background: "#edf9f1", borderLeft: "3px solid " + GREEN, marginBottom: "8px" }}>
+                              <span style={{ fontSize: "12px", fontWeight: 600, color: GREEN }}>鉁?寤鸿鏀逛负锛?/span>
+                              <span style={{ fontSize: "13px" }}>{c.suggested}</span>
+                            </div>
+                            <div style={{ padding: "8px 12px", borderRadius: "6px", background: "#f5f5f5", borderLeft: "3px solid #bbb" }}>
+                              <span style={{ fontSize: "12px", fontWeight: 600, color: "#888" }}>馃挕 淇敼鐞嗙敱锛?/span>
+                              <span style={{ fontSize: "13px", color: "#666" }}>{c.reason}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {activeStudent.essayDetail.teacher_comment && (
+                        <div style={{ background: "#fff8ed", borderRadius: "8px", padding: "16px", border: "1px solid #f0e0c0" }}>
+                          <h3 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "8px" }}>馃挰 鏁欏笀鎬昏瘎</h3>
+                          <p style={{ fontSize: "14px", lineHeight: 2, margin: 0, color: "#555" }}>{activeStudent.essayDetail.teacher_comment}</p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p style={{ color: "#bbb", textAlign: "center", paddingTop: "40px" }}>璇峰厛鎵规敼鍚庢煡鐪?/p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "report" && (
+          <div style={{ maxWidth: 800 }}>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+              {students.filter(s => s.status === "done").map(s => (
+                <button key={s.id} onClick={() => setActiveStudentId(s.id)}
+                  style={{ padding: "6px 16px", borderRadius: "6px", border: "none", cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#eee", color: activeStudentId === s.id ? "#fff" : "#666", fontWeight: 600, fontSize: "13px" }}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+            {activeStudent?.report ? (
+              <div style={{ background: "#fff", borderRadius: "12px", padding: "24px", border: "1px solid #eee" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                  <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700 }}>{"馃搳 " + activeStudent.name + " 鐨勬壒鏀规姤鍛?}</h3>
+                  <button onClick={downloadReport}
+                    style={{ padding: "8px 18px", borderRadius: "6px", border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>
+                    猬?涓嬭浇鎶ュ憡
+                  </button>
+                </div>
+                <pre style={{ whiteSpace: "pre-wrap", fontSize: "14px", lineHeight: 2, color: "#444", background: "#faf8f5", padding: "20px", borderRadius: "8px" }}>
+                  {activeStudent.report}
+                </pre>
+              </div>
+            ) : (
+              <p style={{ color: "#bbb", textAlign: "center", padding: "60px 0" }}>璇峰厛鎵规敼鍚庢煡鐪嬫姤鍛?/p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

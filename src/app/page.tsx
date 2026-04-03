@@ -33,13 +33,18 @@ async function saveImagesToDB(studentId: string, files: File[]) {
     const store = tx.objectStore(DB_STORE);
     const b64arr: string[] = [];
     for (const f of files) {
-      const buf = await f.arrayBuffer();
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      b64arr.push(`data:${f.type || "image/jpeg"};base64,${b64}`);
+      // Use FileReader which handles large files correctly
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(f);
+      });
+      b64arr.push(dataUrl);
     }
     store.put(b64arr, studentId);
     db.close();
-  } catch {}
+  } catch (e) { console.error("saveImagesToDB error:", e); }
 }
 async function loadImagesFromDB(studentId: string): Promise<string[]> {
   try {
@@ -581,7 +586,7 @@ export default function Home() {
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? "24px" : "48px" }}>
             <div style={{ width: isMobile ? "100%" : "250px", flexShrink: 0, paddingRight: isMobile ? 0 : "24px", borderRight: isMobile ? "none" : "1px solid #eee", borderBottom: isMobile ? "1px solid #eee" : "none", paddingBottom: isMobile ? 16 : 0 }}>
               <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "#555" }}>学生列表</h3>
-              <div style={{ display: "flex", gap: 6, marginBottom: 16 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 10px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 16 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {students.filter(s => !s.archived).length === 0 && <p style={{ fontSize: 13, color: "#bbb", textAlign: "center", padding: "20px 0" }}>请先添加学生</p>}
                 {students.filter(s => !s.archived).map(s => (<div key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#fff", color: activeStudentId === s.id ? "#fff" : "#333", border: activeStudentId === s.id ? "none" : "1px solid #eee" }}>

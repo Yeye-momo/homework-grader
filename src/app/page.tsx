@@ -11,7 +11,7 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 const QUICK_STAMPS = [
   { label: "好词✓", color: RED }, { label: "好句✓", color: RED }, { label: "精彩!", color: RED },
   { label: "改", color: RED }, { label: "错字", color: RED }, { label: "?", color: ORANGE },
-  { label: "不通顺", color: ORANGE }, { label: "离题", color: ORANGE }, { label: "加标点", color: ORANGE },
+  { label: "不通顺", color: ORANGE }, { label: "离题", color: ORANGE }, { label: "加标点", color: ORANGE }, { label: "标点符号", color: ORANGE },
   { label: "分段", color: "#2980b9" },
 ];
 
@@ -58,6 +58,8 @@ async function deleteImagesFromDB(studentId: string) {
 
 export default function Home() {
   const [tab, setTab] = useState<TabName>("upload");
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => { const check = () => setIsMobile(window.innerWidth < 768); check(); window.addEventListener("resize", check); return () => window.removeEventListener("resize", check); }, []);
   const [students, setStudents] = useState<Student[]>([]);
   const [activeStudentId, setActiveStudentId] = useState("");
   const [grade, setGrade] = useState("三年级下");
@@ -560,13 +562,13 @@ export default function Home() {
       {parentNotice !== null && <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 420, width: "90%" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>📱 家长通知</h3><button onClick={() => setParentNotice(null)} style={{ background: "transparent", border: "none", fontSize: 20, cursor: "pointer", color: "#999" }}>✕</button></div><pre style={{ whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.8, color: "#444", background: "#f0faf0", padding: 14, borderRadius: 8, marginBottom: 14, border: "1px solid #d0e8d0" }}>{parentNotice}</pre><div style={{ display: "flex", gap: 8 }}><button onClick={() => { navigator.clipboard.writeText(parentNotice); setCopyMsg("已复制通知"); setTimeout(() => setCopyMsg(""), 1500); }} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: GREEN, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{copyMsg === "已复制通知" ? "✅ 已复制" : "📋 复制"}</button><button onClick={() => setParentNotice(null)} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #ddd", background: "#fff", color: "#666", fontSize: 14, cursor: "pointer" }}>关闭</button></div></div></div>}
       {copyMsg && !parentNotice && <div style={{ position: "fixed", top: 80, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: GREEN, color: "#fff", padding: "8px 24px", borderRadius: 8, fontSize: 14, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>✅ {copyMsg}</div>}
 
-      <div style={{ background: "linear-gradient(135deg," + PRIMARY + ",#1a2744)", padding: "14px 32px", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div><h1 style={{ margin: 0, fontSize: "20px", fontWeight: 700, letterSpacing: 2 }}>语文作业智能批改</h1><p style={{ margin: "2px 0 0", fontSize: "12px", opacity: 0.7 }}>上传照片 → AI自动批注 → 微调导出</p></div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={runBatchGrading} disabled={loading} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.5 : 1 }}>🚀 一键批改全部</button>
-          <button onClick={exportAllPNGs} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>📥 导出所有图片</button>
-          <button onClick={exportData} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }} title="备份学生数据到JSON文件">💾 备份数据</button>
-          <button onClick={() => importFileRef.current?.click()} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }} title="从JSON文件恢复数据">📂 恢复数据</button>
+      <div style={{ background: "linear-gradient(135deg," + PRIMARY + ",#1a2744)", padding: isMobile ? "10px 16px" : "14px 32px", color: "#fff", display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "center", gap: isMobile ? 8 : 0 }}>
+        <div><h1 style={{ margin: 0, fontSize: isMobile ? "16px" : "20px", fontWeight: 700, letterSpacing: 2 }}>语文作业智能批改</h1>{!isMobile && <p style={{ margin: "2px 0 0", fontSize: "12px", opacity: 0.7 }}>上传照片 → AI自动批注 → 微调导出</p>}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button onClick={runBatchGrading} disabled={loading} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.5 : 1 }}>🚀 批改全部</button>
+          <button onClick={exportAllPNGs} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>📥 导出图片</button>
+          <button onClick={exportData} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>💾 备份</button>
+          <button onClick={() => importFileRef.current?.click()} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>📂 恢复</button>
           <input ref={importFileRef} type="file" accept=".json" onChange={importData} style={{ display: "none" }} />
         </div>
       </div>
@@ -576,8 +578,8 @@ export default function Home() {
         <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #e0e0e0", marginBottom: 16 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>📤 上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>📝 批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>📦 储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>
 
         {tab === "upload" && (
-          <div style={{ display: "flex", gap: "48px" }}>
-            <div style={{ width: "250px", flexShrink: 0, paddingRight: "24px", borderRight: "1px solid #eee" }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? "24px" : "48px" }}>
+            <div style={{ width: isMobile ? "100%" : "250px", flexShrink: 0, paddingRight: isMobile ? 0 : "24px", borderRight: isMobile ? "none" : "1px solid #eee", borderBottom: isMobile ? "1px solid #eee" : "none", paddingBottom: isMobile ? 16 : 0 }}>
               <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "#555" }}>学生列表</h3>
               <div style={{ display: "flex", gap: 6, marginBottom: 16 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -617,8 +619,8 @@ export default function Home() {
 
         {tab === "detail" && <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>{students.filter(s => s.status === "done").map(s => (<button key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} style={{ padding: "6px 16px", borderRadius: 6, border: "none", cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#eee", color: activeStudentId === s.id ? "#fff" : "#666", fontWeight: 600, fontSize: 13 }}>{s.name}</button>))}{students.filter(s => s.status === "done").length === 0 && <p style={{ color: "#bbb", fontSize: 14 }}>还没有批改完成的学生</p>}</div>
-          {activeStudent?.status === "done" && <div style={{ display: "flex", gap: 16 }}>
-            <div style={{ flex: "0 0 56%", display: "flex", flexDirection: "column" }}>
+          {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16 }}>
+            <div style={{ flex: isMobile ? "auto" : "0 0 56%", display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 10px", marginBottom: 4, background: "#fff", borderRadius: 10, border: "1px solid #e0e0e0", flexWrap: "wrap" }}>
                 {toolDefs.map(t => (<button key={t.k} onClick={() => { setTool(t.k); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }} title={t.l} style={{ width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer", background: tool === t.k && !pendingStamp ? PRIMARY : "transparent", color: tool === t.k && !pendingStamp ? "#fff" : "#555", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>{t.ic}</button>))}
                 <div style={{ width: 1, height: 24, background: "#ddd", margin: "0 4px" }} />
@@ -670,7 +672,7 @@ export default function Home() {
               <p style={{ fontSize: 11, color: "#bbb", textAlign: "center", margin: "4px 0 0" }}>💡 快捷键 1-7 切换工具 · 双击文字编辑 · 靠近批注显示✥移动按钮 · Esc取消</p>
             </div>
 
-            <div style={{ flex: "0 0 42%", overflow: "auto", maxHeight: "calc(100vh - 180px)" }}>
+            <div style={{ flex: isMobile ? "auto" : "0 0 42%", overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 180px)" }}>
               {activeStudent.essayDetail ? <>
                 <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}><button onClick={copyAllDetail} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📋 复制全部</button><button onClick={generateParentNotice} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📱 家长通知</button></div>
                 <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: RED }}>✏️ 逐段批注</h3>{(activeStudent.essayDetail.corrections || []).map((c: any, i: number) => (<div key={i} style={{ background: "#fff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #eee" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}><div style={{ flex: 1 }}><span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: c.type === "praise" ? GREEN : RED, color: "#fff" }}>{c.paragraph}{c.type === "praise" ? " 👍" : ""}</span><p style={{ fontSize: 13, margin: "4px 0 0", color: "#444" }}>{c.text}</p></div><button onClick={() => copyOneCorrection(c)} style={cpBtnS} title="复制批注">📋</button></div>{c.suggested && c.type !== "praise" && <div style={{ marginTop: 4, padding: "4px 10px", borderRadius: 5, background: "#edf9f1", borderLeft: "3px solid " + GREEN, fontSize: 13, color: GREEN, display: "flex", justifyContent: "space-between", alignItems: "center" }}>→ {c.suggested}<button onClick={() => copyOneSuggested(c)} style={{ ...cpBtnS, color: GREEN }} title="复制建议">📋</button></div>}</div>))}</div>

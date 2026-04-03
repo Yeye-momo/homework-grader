@@ -5,9 +5,15 @@ const client = new OpenAI({
   baseURL: "https://ark.cn-beijing.volces.com/api/v3",
 });
 
+// OCR uses fast model (ARK_ENDPOINT_ID_FAST), grading uses accurate model (ARK_ENDPOINT_ID)
+function getEndpoint(type: "ocr" | "grading") {
+  if (type === "ocr") return process.env.ARK_ENDPOINT_ID_FAST || process.env.ARK_ENDPOINT_ID!;
+  return process.env.ARK_ENDPOINT_ID!;
+}
+
 export async function callDoubao(system: string, userText: string) {
   const response = await client.chat.completions.create({
-    model: process.env.ARK_ENDPOINT_ID!,
+    model: getEndpoint("grading"),
     messages: [
       { role: "system", content: system },
       { role: "user", content: userText },
@@ -28,7 +34,7 @@ export async function callDoubaoWithImages(
   }));
 
   const response = await client.chat.completions.create({
-    model: process.env.ARK_ENDPOINT_ID!,
+    model: getEndpoint("ocr"),
     messages: [
       { role: "system", content: system },
       {

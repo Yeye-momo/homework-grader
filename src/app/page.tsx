@@ -15,50 +15,59 @@ const QUICK_STAMPS = [
   { label: "分段", color: "#2980b9" },
 ];
 
-// ===== IndexedDB helpers for image persistence =====
-const DB_NAME = "hw_grader_images";
-const DB_STORE = "images";
-function openDB(): Promise<IDBDatabase> {
+// ===== IndexedDB for images (reliable version) =====
+const DB_NAME = "hw_grader_img_v2";
+const DB_STORE = "imgs";
+
+function openImgDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => { req.result.createObjectStore(DB_STORE); };
+    req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(DB_STORE)) req.result.createObjectStore(DB_STORE); };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
-async function saveImagesToDB(studentId: string, files: File[]) {
-  try {
-    const db = await openDB();
-    const tx = db.transaction(DB_STORE, "readwrite");
-    const store = tx.objectStore(DB_STORE);
-    const b64arr: string[] = [];
-    for (const f of files) {
-      // Use FileReader which handles large files correctly
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(f);
-      });
-      b64arr.push(dataUrl);
-    }
-    store.put(b64arr, studentId);
-    db.close();
-  } catch (e) { console.error("saveImagesToDB error:", e); }
+
+// Save one image as base64 data URL
+function saveOneImage(studentId: string, pageIdx: number, dataUrl: string): Promise<void> {
+  return new Promise(async (resolve) => {
+    try {
+      const db = await openImgDB();
+      const tx = db.transaction(DB_STORE, "readwrite");
+      tx.objectStore(DB_STORE).put(dataUrl, studentId + "_img_" + pageIdx);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); resolve(); };
+    } catch { resolve(); }
+  });
 }
-async function loadImagesFromDB(studentId: string): Promise<string[]> {
+
+// Load all images for a student
+async function loadStudentImages(studentId: string, count: number): Promise<string[]> {
   try {
-    const db = await openDB();
-    return new Promise((resolve) => {
-      const tx = db.transaction(DB_STORE, "readonly");
-      const req = tx.objectStore(DB_STORE).get(studentId);
-      req.onsuccess = () => { db.close(); resolve(req.result || []); };
-      req.onerror = () => { db.close(); resolve([]); };
-    });
+    const db = await openImgDB();
+    const results: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const url = await new Promise<string>((resolve) => {
+        const tx = db.transaction(DB_STORE, "readonly");
+        const req = tx.objectStore(DB_STORE).get(studentId + "_img_" + i);
+        req.onsuccess = () => resolve(req.result || "");
+        req.onerror = () => resolve("");
+      });
+      if (url) results.push(url);
+    }
+    db.close();
+    return results;
   } catch { return []; }
 }
-async function deleteImagesFromDB(studentId: string) {
-  try { const db = await openDB(); const tx = db.transaction(DB_STORE, "readwrite"); tx.objectStore(DB_STORE).delete(studentId); db.close(); } catch {}
+
+// Delete all images for a student
+async function deleteStudentImages(studentId: string, count: number) {
+  try {
+    const db = await openImgDB();
+    const tx = db.transaction(DB_STORE, "readwrite");
+    for (let i = 0; i < count; i++) tx.objectStore(DB_STORE).delete(studentId + "_img_" + i);
+    tx.oncomplete = () => db.close();
+  } catch {}
 }
 
 export default function Home() {
@@ -148,24 +157,27 @@ export default function Home() {
     setPadMap(prev => ({ ...prev, [pk]: [0,0,0,0] }));
   }
 
-  // === localStorage save/restore ===
+  // === Data persistence: localStorage for text, IndexedDB for images ===
   useEffect(() => {
     try {
-      const d = JSON.parse(localStorage.getItem("hw_grader_v5") || "{}");
+      const d = JSON.parse(localStorage.getItem("hw_grader_v7") || "{}");
       if (d.students) {
-        // Clear imageUrls from localStorage (blob URLs are invalid after refresh)
         const loaded = d.students.map((s: any) => ({ ...s, images: [], imageUrls: [] }));
         setStudents(loaded);
         setActiveStudentId(d.activeStudentId || "");
         if (d.grade) setGrade(d.grade);
         if (d.topic) setTopic(d.topic);
-        // Restore images from IndexedDB (base64 data URLs that persist)
-        loaded.forEach((s: Student) => {
-          loadImagesFromDB(s.id).then(urls => {
-            if (urls.length > 0) {
-              setStudents(prev => prev.map(st => st.id === s.id ? { ...st, imageUrls: urls } : st));
-            }
-          });
+        // Restore images from IndexedDB
+        loaded.forEach((s: any) => {
+          const imgCount = s.imageCount || 0;
+          if (imgCount > 0) {
+            loadStudentImages(s.id, imgCount).then(urls => {
+              const validUrls = urls.filter(u => u);
+              if (validUrls.length > 0) {
+                setStudents(prev => prev.map(st => st.id === s.id ? { ...st, imageUrls: validUrls } : st));
+              }
+            });
+          }
         });
       }
       if (d.actionMap) setActionMap(d.actionMap);
@@ -173,8 +185,14 @@ export default function Home() {
     } catch {}
   }, []);
   useEffect(() => {
-    // Don't save imageUrls to localStorage (they're blob URLs that expire on refresh)
-    try { localStorage.setItem("hw_grader_v5", JSON.stringify({ students: students.map(s => ({ ...s, images: [], imageUrls: [] })), activeStudentId, grade, topic, actionMap, padMap })); } catch {}
+    try {
+      // Save text data + imageCount (not the actual image data)
+      const data = {
+        students: students.map(s => ({ ...s, images: [], imageUrls: [], imageCount: s.imageUrls.length })),
+        activeStudentId, grade, topic, actionMap, padMap
+      };
+      localStorage.setItem("hw_grader_v7", JSON.stringify(data));
+    } catch {}
   }, [students, activeStudentId, grade, topic, actionMap, padMap]);
 
   // text wrap helper
@@ -492,26 +510,44 @@ export default function Home() {
 
   // Student management (with IndexedDB image save)
   function addStudent() { if (!newName.trim()) { alert("请输入学生姓名"); return; } const s: Student = { id: uid(), name: newName.trim(), images: [], imageUrls: [], ocrText: "", essayDetail: null, report: "", status: "idle" }; setStudents(prev => [...prev, s]); setActiveStudentId(s.id); setNewName(""); }
-  function removeStudent(id: string) { setStudents(prev => prev.filter(s => s.id !== id)); deleteImagesFromDB(id); if (activeStudentId === id) setActiveStudentId(students.find(s => s.id !== id && !s.archived)?.id || ""); setLoading(false); setProgress(0); setStepText(""); setBatchStatus(""); }
+  function removeStudent(id: string) { const stu = students.find(s => s.id === id); deleteStudentImages(id, stu?.imageUrls.length || 10); setStudents(prev => prev.filter(s => s.id !== id)); if (activeStudentId === id) setActiveStudentId(students.find(s => s.id !== id && !s.archived)?.id || ""); setLoading(false); setProgress(0); setStepText(""); setBatchStatus(""); }
   function archiveStudent(id: string) { setStudents(prev => prev.map(s => s.id === id ? { ...s, archived: true } : s)); if (activeStudentId === id) setActiveStudentId(students.find(s => s.id !== id && !s.archived)?.id || ""); }
   function unarchiveStudent(id: string) { setStudents(prev => prev.map(s => s.id === id ? { ...s, archived: false } : s)); }
-  function onPickImages(e: React.ChangeEvent<HTMLInputElement>) {
+  // Convert File to base64 data URL
+  function fileToDataURL(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+  async function onPickImages(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []); if (files.length === 0 || !activeStudentId) return;
-    const urls = files.map(f => URL.createObjectURL(f));
-    setStudents(prev => prev.map(s => s.id !== activeStudentId ? s : { ...s, images: [...s.images, ...files], imageUrls: [...s.imageUrls, ...urls] }));
-    // Save to IndexedDB
     const stu = students.find(s => s.id === activeStudentId);
-    const allFiles = [...(stu?.images || []), ...files];
-    saveImagesToDB(activeStudentId, allFiles);
+    const existingCount = stu?.imageUrls.length || 0;
+    const dataUrls: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const dataUrl = await fileToDataURL(files[i]);
+      dataUrls.push(dataUrl);
+      // Save each image to IndexedDB immediately
+      await saveOneImage(activeStudentId, existingCount + i, dataUrl);
+    }
+    setStudents(prev => prev.map(s => s.id !== activeStudentId ? s : { ...s, images: [...s.images, ...files], imageUrls: [...s.imageUrls, ...dataUrls] }));
     e.target.value = "";
   }
-  function onDropImages(e: React.DragEvent) {
+  async function onDropImages(e: React.DragEvent) {
     e.preventDefault(); e.stopPropagation(); setDragOver(false); if (!activeStudentId) return;
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")); if (files.length === 0) return;
-    const urls = files.map(f => URL.createObjectURL(f));
-    setStudents(prev => prev.map(s => s.id !== activeStudentId ? s : { ...s, images: [...s.images, ...files], imageUrls: [...s.imageUrls, ...urls] }));
     const stu = students.find(s => s.id === activeStudentId);
-    saveImagesToDB(activeStudentId, [...(stu?.images || []), ...files]);
+    const existingCount = stu?.imageUrls.length || 0;
+    const dataUrls: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const dataUrl = await fileToDataURL(files[i]);
+      dataUrls.push(dataUrl);
+      await saveOneImage(activeStudentId, existingCount + i, dataUrl);
+    }
+    setStudents(prev => prev.map(s => s.id !== activeStudentId ? s : { ...s, images: [...s.images, ...files], imageUrls: [...s.imageUrls, ...dataUrls] }));
   }
   function removeImage(sid: string, idx: number) { setStudents(prev => prev.map(s => { if (s.id !== sid) return s; return { ...s, images: s.images.filter((_, i) => i !== idx), imageUrls: s.imageUrls.filter((_, i) => i !== idx) }; })); }
   function updateStudent(id: string, d: Partial<Student>) { setStudents(prev => prev.map(s => s.id === id ? { ...s, ...d } : s)); }
@@ -586,7 +622,7 @@ export default function Home() {
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? "24px" : "48px" }}>
             <div style={{ width: isMobile ? "100%" : "250px", flexShrink: 0, paddingRight: isMobile ? 0 : "24px", borderRight: isMobile ? "none" : "1px solid #eee", borderBottom: isMobile ? "1px solid #eee" : "none", paddingBottom: isMobile ? 16 : 0 }}>
               <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "#555" }}>学生列表</h3>
-              <div style={{ display: "flex", gap: 6, marginBottom: 16 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 10px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 16 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {students.filter(s => !s.archived).length === 0 && <p style={{ fontSize: 13, color: "#bbb", textAlign: "center", padding: "20px 0" }}>请先添加学生</p>}
                 {students.filter(s => !s.archived).map(s => (<div key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#fff", color: activeStudentId === s.id ? "#fff" : "#333", border: activeStudentId === s.id ? "none" : "1px solid #eee" }}>

@@ -528,15 +528,32 @@ export default function Home() {
       reader.readAsDataURL(file);
     });
   }
+  // Compress image to reduce size for API upload (max 1200px wide, JPEG quality 0.7)
+  function compressImage(file: File, maxWidth = 1200, quality = 0.7): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(URL.createObjectURL(file)); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => resolve(URL.createObjectURL(file));
+      img.src = URL.createObjectURL(file);
+    });
+  }
   async function onPickImages(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []); if (files.length === 0 || !activeStudentId) return;
     const stu = students.find(s => s.id === activeStudentId);
     const existingCount = stu?.imageUrls.length || 0;
     const dataUrls: string[] = [];
     for (let i = 0; i < files.length; i++) {
-      const dataUrl = await fileToDataURL(files[i]);
+      const dataUrl = await compressImage(files[i]);
       dataUrls.push(dataUrl);
-      // Save each image to IndexedDB immediately
       await saveOneImage(activeStudentId, existingCount + i, dataUrl);
     }
     setStudents(prev => prev.map(s => s.id !== activeStudentId ? s : { ...s, images: [...s.images, ...files], imageUrls: [...s.imageUrls, ...dataUrls] }));
@@ -549,7 +566,7 @@ export default function Home() {
     const existingCount = stu?.imageUrls.length || 0;
     const dataUrls: string[] = [];
     for (let i = 0; i < files.length; i++) {
-      const dataUrl = await fileToDataURL(files[i]);
+      const dataUrl = await compressImage(files[i]);
       dataUrls.push(dataUrl);
       await saveOneImage(activeStudentId, existingCount + i, dataUrl);
     }
@@ -562,7 +579,7 @@ export default function Home() {
   async function onPickModelImages(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []); if (files.length === 0) return;
     const dataUrls: string[] = [];
-    for (const f of files) { dataUrls.push(await fileToDataURL(f)); }
+    for (const f of files) { dataUrls.push(await compressImage(f)); }
     setModelFiles(prev => [...prev, ...files]);
     setModelImageUrls(prev => [...prev, ...dataUrls]);
     e.target.value = "";
@@ -571,7 +588,7 @@ export default function Home() {
     e.preventDefault(); e.stopPropagation(); setModelDragOver(false);
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")); if (files.length === 0) return;
     const dataUrls: string[] = [];
-    for (const f of files) { dataUrls.push(await fileToDataURL(f)); }
+    for (const f of files) { dataUrls.push(await compressImage(f)); }
     setModelFiles(prev => [...prev, ...files]);
     setModelImageUrls(prev => [...prev, ...dataUrls]);
   }
@@ -591,8 +608,11 @@ export default function Home() {
       if (modelImageUrls.length > 0 && !modelText) {
         onP?.(5, "正在识别范文...");
         const mfd = new FormData();
-        if (modelFiles.length > 0) { modelFiles.forEach(f => mfd.append("images", f)); }
-        else { for (const url of modelImageUrls) { const res = await fetch(url); const blob = await res.blob(); mfd.append("images", new File([blob], "model.jpg", { type: blob.type })); } }
+        // Always use compressed dataURLs (modelImageUrls already compressed)
+        for (const url of modelImageUrls) {
+          const res = await fetch(url); const blob = await res.blob();
+          mfd.append("images", new File([blob], "model.jpg", { type: "image/jpeg" }));
+        }
         const mr = await fetch("/api/ocr", { method: "POST", body: mfd });
         if (mr.ok) {
           const { ocrText: modelOcr } = await mr.json();
@@ -667,7 +687,7 @@ export default function Home() {
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 16 : 24 }}>
             {/* ====== LEFT: Student list + photo upload ====== */}
             <div style={{ width: isMobile ? "100%" : "55%", flexShrink: 0 }}>
-              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 10px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                 {students.filter(s => !s.archived).length === 0 && <p style={{ fontSize: 13, color: "#bbb", textAlign: "center", padding: "20px 0" }}>请先添加学生</p>}
                 {students.filter(s => !s.archived).map(s => (<div key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#fff", color: activeStudentId === s.id ? "#fff" : "#333", border: activeStudentId === s.id ? "none" : "1px solid #eee" }}>

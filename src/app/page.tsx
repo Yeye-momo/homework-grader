@@ -41,6 +41,44 @@ function saveOneImage(studentId: string, pageIdx: number, dataUrl: string): Prom
   });
 }
 
+// Save/load model essay images in IndexedDB
+function saveModelImage(idx: number, dataUrl: string): Promise<void> {
+  return new Promise(async (resolve) => {
+    try {
+      const db = await openImgDB();
+      const tx = db.transaction(DB_STORE, "readwrite");
+      tx.objectStore(DB_STORE).put(dataUrl, "model_essay_img_" + idx);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); resolve(); };
+    } catch { resolve(); }
+  });
+}
+async function loadModelImages(count: number): Promise<string[]> {
+  try {
+    const db = await openImgDB();
+    const results: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const url = await new Promise<string>((resolve) => {
+        const tx = db.transaction(DB_STORE, "readonly");
+        const req = tx.objectStore(DB_STORE).get("model_essay_img_" + i);
+        req.onsuccess = () => resolve(req.result || "");
+        req.onerror = () => resolve("");
+      });
+      if (url) results.push(url);
+    }
+    db.close();
+    return results;
+  } catch { return []; }
+}
+async function clearModelImages(count: number) {
+  try {
+    const db = await openImgDB();
+    const tx = db.transaction(DB_STORE, "readwrite");
+    for (let i = 0; i < count; i++) tx.objectStore(DB_STORE).delete("model_essay_img_" + i);
+    tx.oncomplete = () => db.close();
+  } catch {}
+}
+
 // Load all images for a student
 async function loadStudentImages(studentId: string, count: number): Promise<string[]> {
   try {
@@ -188,6 +226,16 @@ export default function Home() {
       }
       if (d.actionMap) setActionMap(d.actionMap);
       if (d.padMap) setPadMap(d.padMap);
+      if (d.specialReq) setSpecialReq(d.specialReq);
+      if (d.modelText) setModelText(d.modelText);
+      // Restore model essay images from IndexedDB
+      const modelImgCount = d.modelImageCount || 0;
+      if (modelImgCount > 0) {
+        loadModelImages(modelImgCount).then(urls => {
+          const valid = urls.filter(u => u);
+          if (valid.length > 0) setModelImageUrls(valid);
+        });
+      }
     } catch {}
   }, []);
   useEffect(() => {
@@ -195,11 +243,12 @@ export default function Home() {
       // Save text data + imageCount (not the actual image data)
       const data = {
         students: students.map(s => ({ ...s, images: [], imageUrls: [], imageCount: s.imageUrls.length })),
-        activeStudentId, grade, topic, actionMap, padMap
+        activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText,
+        modelImageCount: modelImageUrls.length,
       };
       localStorage.setItem("hw_grader_v7", JSON.stringify(data));
     } catch {}
-  }, [students, activeStudentId, grade, topic, actionMap, padMap]);
+  }, [students, activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText, modelImageUrls]);
 
   // text wrap helper
   function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
@@ -578,8 +627,13 @@ export default function Home() {
   // === Model essay (范文) image handlers ===
   async function onPickModelImages(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []); if (files.length === 0) return;
+    const existingCount = modelImageUrls.length;
     const dataUrls: string[] = [];
-    for (const f of files) { dataUrls.push(await compressImage(f)); }
+    for (let i = 0; i < files.length; i++) {
+      const url = await compressImage(files[i]);
+      dataUrls.push(url);
+      await saveModelImage(existingCount + i, url);
+    }
     setModelFiles(prev => [...prev, ...files]);
     setModelImageUrls(prev => [...prev, ...dataUrls]);
     e.target.value = "";
@@ -587,15 +641,26 @@ export default function Home() {
   async function onDropModelImages(e: React.DragEvent) {
     e.preventDefault(); e.stopPropagation(); setModelDragOver(false);
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")); if (files.length === 0) return;
+    const existingCount = modelImageUrls.length;
     const dataUrls: string[] = [];
-    for (const f of files) { dataUrls.push(await compressImage(f)); }
+    for (let i = 0; i < files.length; i++) {
+      const url = await compressImage(files[i]);
+      dataUrls.push(url);
+      await saveModelImage(existingCount + i, url);
+    }
     setModelFiles(prev => [...prev, ...files]);
     setModelImageUrls(prev => [...prev, ...dataUrls]);
   }
-  function removeModelImage(idx: number) {
+  async function removeModelImage(idx: number) {
+    const newUrls = modelImageUrls.filter((_, i) => i !== idx);
     setModelFiles(prev => prev.filter((_, i) => i !== idx));
-    setModelImageUrls(prev => prev.filter((_, i) => i !== idx));
+    setModelImageUrls(newUrls);
     setModelText("");
+    // Re-save all model images to IndexedDB with correct indices
+    await clearModelImages(modelImageUrls.length);
+    for (let i = 0; i < newUrls.length; i++) {
+      await saveModelImage(i, newUrls[i]);
+    }
   }
 
   // Grading with error recovery
@@ -604,18 +669,28 @@ export default function Home() {
     updateStudent(sid, { status: "grading", errorMsg: undefined });
     try {
       // Step 1: OCR model essay if needed (only first time)
+      // Split into batches of 2 images to avoid FUNCTION_PAYLOAD_TOO_LARGE
       let modelAnalysis = modelText;
       if (modelImageUrls.length > 0 && !modelText) {
         onP?.(5, "正在识别范文...");
-        const mfd = new FormData();
-        // Always use compressed dataURLs (modelImageUrls already compressed)
-        for (const url of modelImageUrls) {
-          const res = await fetch(url); const blob = await res.blob();
-          mfd.append("images", new File([blob], "model.jpg", { type: "image/jpeg" }));
+        const BATCH_SIZE = 2;
+        const ocrParts: string[] = [];
+        for (let bi = 0; bi < modelImageUrls.length; bi += BATCH_SIZE) {
+          const batch = modelImageUrls.slice(bi, bi + BATCH_SIZE);
+          onP?.(5 + Math.round((bi / modelImageUrls.length) * 10), `正在识别范文（${bi + 1}-${Math.min(bi + BATCH_SIZE, modelImageUrls.length)}/${modelImageUrls.length}张）...`);
+          const mfd = new FormData();
+          for (const url of batch) {
+            const res = await fetch(url); const blob = await res.blob();
+            mfd.append("images", new File([blob], "model.jpg", { type: "image/jpeg" }));
+          }
+          const mr = await fetch("/api/ocr", { method: "POST", body: mfd });
+          if (mr.ok) {
+            const { ocrText: partOcr } = await mr.json();
+            if (partOcr) ocrParts.push(partOcr);
+          }
         }
-        const mr = await fetch("/api/ocr", { method: "POST", body: mfd });
-        if (mr.ok) {
-          const { ocrText: modelOcr } = await mr.json();
+        const modelOcr = ocrParts.join("\n\n");
+        if (modelOcr.trim()) {
           onP?.(15, "范文识别完成，正在分析范文...");
           const mr2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText: modelOcr, gradeInfo: grade + " " + topic, isModelEssay: true }) });
           if (mr2.ok) {
@@ -626,14 +701,28 @@ export default function Home() {
         }
       }
 
-      // Step 2: OCR student essay
+      // Step 2: OCR student essay (batch 2 images at a time)
       onP?.(25, "正在OCR识别学生作文...");
-      const fd = new FormData();
-      if (stu.images.length > 0) { stu.images.forEach(f => fd.append("images", f)); }
-      else { for (const url of stu.imageUrls) { const res = await fetch(url); const blob = await res.blob(); fd.append("images", new File([blob], "image.jpg", { type: blob.type })); } }
-      const r1 = await fetch("/api/ocr", { method: "POST", body: fd });
-      if (!r1.ok) { const t = await r1.text(); throw new Error("OCR失败: " + (t || r1.statusText)); }
-      const { ocrText } = await r1.json(); updateStudent(sid, { ocrText });
+      const imgSources: { blob: Blob; name: string }[] = [];
+      if (stu.images.length > 0) {
+        for (const f of stu.images) imgSources.push({ blob: f, name: f.name });
+      } else {
+        for (const url of stu.imageUrls) { const res = await fetch(url); const blob = await res.blob(); imgSources.push({ blob, name: "image.jpg" }); }
+      }
+      const stuOcrParts: string[] = [];
+      const STU_BATCH = 2;
+      for (let bi = 0; bi < imgSources.length; bi += STU_BATCH) {
+        const batch = imgSources.slice(bi, bi + STU_BATCH);
+        if (imgSources.length > STU_BATCH) onP?.(25 + Math.round((bi / imgSources.length) * 25), `正在识别第${bi + 1}-${Math.min(bi + STU_BATCH, imgSources.length)}/${imgSources.length}页...`);
+        const fd = new FormData();
+        for (const src of batch) fd.append("images", new File([src.blob], src.name, { type: src.blob.type || "image/jpeg" }));
+        const r1 = await fetch("/api/ocr", { method: "POST", body: fd });
+        if (!r1.ok) { const t = await r1.text(); throw new Error("OCR失败: " + (t || r1.statusText)); }
+        const { ocrText: partOcr } = await r1.json();
+        if (partOcr) stuOcrParts.push(partOcr);
+      }
+      const ocrText = stuOcrParts.join("\n\n");
+      updateStudent(sid, { ocrText });
 
       // Step 3: AI grading with model + special requirements
       onP?.(55, "文字识别完成，正在AI精批...");

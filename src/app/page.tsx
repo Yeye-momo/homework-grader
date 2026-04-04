@@ -80,8 +80,9 @@ export default function Home() {
   const [topic, setTopic] = useState("中华传统节日");
   const [specialReq, setSpecialReq] = useState("");
   const [modelText, setModelText] = useState("");
-  const [modelImageUrl, setModelImageUrl] = useState("");
-  const [modelLoading, setModelLoading] = useState(false);
+  const [modelImageUrls, setModelImageUrls] = useState<string[]>([]);
+  const [modelFiles, setModelFiles] = useState<File[]>([]);
+  const [modelDragOver, setModelDragOver] = useState(false);
   const modelFileRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -557,27 +558,27 @@ export default function Home() {
   function removeImage(sid: string, idx: number) { setStudents(prev => prev.map(s => { if (s.id !== sid) return s; return { ...s, images: s.images.filter((_, i) => i !== idx), imageUrls: s.imageUrls.filter((_, i) => i !== idx) }; })); }
   function updateStudent(id: string, d: Partial<Student>) { setStudents(prev => prev.map(s => s.id === id ? { ...s, ...d } : s)); }
 
-  // === Model essay (范文) analysis ===
-  async function analyzeModelEssay(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return;
-    const dataUrl = await fileToDataURL(file);
-    setModelImageUrl(dataUrl);
-    setModelLoading(true);
-    try {
-      // OCR the model essay
-      const fd = new FormData(); fd.append("images", file);
-      const r1 = await fetch("/api/ocr", { method: "POST", body: fd });
-      if (!r1.ok) throw new Error("范文识别失败");
-      const { ocrText } = await r1.json();
-      // Analyze structure
-      const r2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText, gradeInfo: grade + " " + topic, isModelEssay: true }) });
-      if (!r2.ok) throw new Error("范文分析失败");
-      const analysis = await r2.json();
-      const analysisText = typeof analysis === "string" ? analysis : JSON.stringify(analysis, null, 2);
-      setModelText(analysisText);
-    } catch (err: any) { alert("范文分析出错：" + err.message); }
-    finally { setModelLoading(false); }
+  // === Model essay (范文) image handlers ===
+  async function onPickModelImages(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []); if (files.length === 0) return;
+    const dataUrls: string[] = [];
+    for (const f of files) { dataUrls.push(await fileToDataURL(f)); }
+    setModelFiles(prev => [...prev, ...files]);
+    setModelImageUrls(prev => [...prev, ...dataUrls]);
     e.target.value = "";
+  }
+  async function onDropModelImages(e: React.DragEvent) {
+    e.preventDefault(); e.stopPropagation(); setModelDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")); if (files.length === 0) return;
+    const dataUrls: string[] = [];
+    for (const f of files) { dataUrls.push(await fileToDataURL(f)); }
+    setModelFiles(prev => [...prev, ...files]);
+    setModelImageUrls(prev => [...prev, ...dataUrls]);
+  }
+  function removeModelImage(idx: number) {
+    setModelFiles(prev => prev.filter((_, i) => i !== idx));
+    setModelImageUrls(prev => prev.filter((_, i) => i !== idx));
+    setModelText("");
   }
 
   // Grading with error recovery
@@ -585,22 +586,38 @@ export default function Home() {
     const stu = students.find(s => s.id === sid); if (!stu || stu.images.length === 0 && stu.imageUrls.length === 0) return;
     updateStudent(sid, { status: "grading", errorMsg: undefined });
     try {
-      onP?.(10, "正在OCR识别文字...");
-      // If images are File objects, use them; otherwise fetch from imageUrls
-      const fd = new FormData();
-      if (stu.images.length > 0) { stu.images.forEach(f => fd.append("images", f)); }
-      else {
-        // Convert data URLs back to blobs for OCR
-        for (const url of stu.imageUrls) {
-          const res = await fetch(url); const blob = await res.blob();
-          fd.append("images", new File([blob], "image.jpg", { type: blob.type }));
+      // Step 1: OCR model essay if needed (only first time)
+      let modelAnalysis = modelText;
+      if (modelImageUrls.length > 0 && !modelText) {
+        onP?.(5, "正在识别范文...");
+        const mfd = new FormData();
+        if (modelFiles.length > 0) { modelFiles.forEach(f => mfd.append("images", f)); }
+        else { for (const url of modelImageUrls) { const res = await fetch(url); const blob = await res.blob(); mfd.append("images", new File([blob], "model.jpg", { type: blob.type })); } }
+        const mr = await fetch("/api/ocr", { method: "POST", body: mfd });
+        if (mr.ok) {
+          const { ocrText: modelOcr } = await mr.json();
+          onP?.(15, "范文识别完成，正在分析范文...");
+          const mr2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText: modelOcr, gradeInfo: grade + " " + topic, isModelEssay: true }) });
+          if (mr2.ok) {
+            const analysis = await mr2.json();
+            modelAnalysis = typeof analysis === "string" ? analysis : JSON.stringify(analysis, null, 2);
+            setModelText(modelAnalysis);
+          }
         }
       }
+
+      // Step 2: OCR student essay
+      onP?.(25, "正在OCR识别学生作文...");
+      const fd = new FormData();
+      if (stu.images.length > 0) { stu.images.forEach(f => fd.append("images", f)); }
+      else { for (const url of stu.imageUrls) { const res = await fetch(url); const blob = await res.blob(); fd.append("images", new File([blob], "image.jpg", { type: blob.type })); } }
       const r1 = await fetch("/api/ocr", { method: "POST", body: fd });
       if (!r1.ok) { const t = await r1.text(); throw new Error("OCR失败: " + (t || r1.statusText)); }
       const { ocrText } = await r1.json(); updateStudent(sid, { ocrText });
-      onP?.(50, "文字识别完成，正在AI精批...");
-      const r2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText, gradeInfo: grade + " " + topic, modelAnalysis: modelText || undefined, specialRequirement: specialReq || undefined }) });
+
+      // Step 3: AI grading with model + special requirements
+      onP?.(55, "文字识别完成，正在AI精批...");
+      const r2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText, gradeInfo: grade + " " + topic, modelAnalysis: modelAnalysis || undefined, specialRequirement: specialReq || undefined }) });
       if (!r2.ok) { const t = await r2.text(); throw new Error("精批失败: " + (t || r2.statusText)); }
       const essayDetail = await r2.json(); updateStudent(sid, { essayDetail, status: "done" });
       onP?.(100, "批改完成！");
@@ -647,76 +664,71 @@ export default function Home() {
         <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #e0e0e0", marginBottom: 16 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>📤 上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>📝 批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>📦 储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>
 
         {tab === "upload" && (
-          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? "24px" : "48px" }}>
-            <div style={{ width: isMobile ? "100%" : "250px", flexShrink: 0, paddingRight: isMobile ? 0 : "24px", borderRight: isMobile ? "none" : "1px solid #eee", borderBottom: isMobile ? "1px solid #eee" : "none", paddingBottom: isMobile ? 16 : 0 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "#555" }}>学生列表</h3>
-              <div style={{ display: "flex", gap: 6, marginBottom: 16 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 10px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 16 : 24 }}>
+            {/* ====== LEFT: Student list + photo upload ====== */}
+            <div style={{ width: isMobile ? "100%" : "55%", flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                 {students.filter(s => !s.archived).length === 0 && <p style={{ fontSize: 13, color: "#bbb", textAlign: "center", padding: "20px 0" }}>请先添加学生</p>}
                 {students.filter(s => !s.archived).map(s => (<div key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#fff", color: activeStudentId === s.id ? "#fff" : "#333", border: activeStudentId === s.id ? "none" : "1px solid #eee" }}>
                   <div><span style={{ fontWeight: 600, fontSize: 14 }}>{s.name}</span><span style={{ marginLeft: 8, fontSize: 11, padding: "2px 6px", borderRadius: 4, background: s.status === "done" ? GREEN : s.status === "grading" ? "#f39c12" : s.status === "error" ? RED : "#eee", color: s.status === "idle" ? "#999" : "#fff" }}>{s.status === "done" ? "已批改" : s.status === "grading" ? "批改中" : s.status === "error" ? "出错" : (s.images.length || s.imageUrls.length) + "张"}</span></div>
                   <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                    {s.status === "error" && <button onClick={e => { e.stopPropagation(); retryGrading(s.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "#ffd" : ORANGE, fontSize: 12, fontWeight: 600 }}>🔄重试</button>}
-                    {s.status === "done" && <button onClick={e => { e.stopPropagation(); archiveStudent(s.id); }} title="归档到储存箱" style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "rgba(255,255,255,0.7)" : "#aaa", fontSize: 13 }}>📦</button>}
+                    {s.status === "error" && <button onClick={e => { e.stopPropagation(); retryGrading(s.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "#ffd" : ORANGE, fontSize: 12, fontWeight: 600 }}>🔄</button>}
+                    {s.status === "done" && <button onClick={e => { e.stopPropagation(); archiveStudent(s.id); }} title="归档" style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "rgba(255,255,255,0.7)" : "#aaa", fontSize: 13 }}>📦</button>}
                     <button onClick={e => { e.stopPropagation(); removeStudent(s.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "rgba(255,255,255,0.6)" : "#ccc", fontSize: 16 }}>✕</button>
                   </div>
                 </div>))}
               </div>
-            </div>
-            <div style={{ flex: 1 }}>
-              {!activeStudent ? <div style={{ textAlign: "center", padding: "80px 0", color: "#bbb" }}><p style={{ fontSize: 40 }}>👈</p><p>请先在左侧添加学生</p></div> : <>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>{activeStudent.name} 的作业</h3>
-                {/* Error message with retry */}
-                {activeStudent.status === "error" && <div style={{ background: "#fef2f2", border: "1px solid #f0c0c0", borderRadius: 8, padding: 12, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div><span style={{ color: RED, fontWeight: 600 }}>❌ 批改出错：</span><span style={{ color: "#666", fontSize: 13 }}>{activeStudent.errorMsg || "未知错误"}</span></div>
-                  <button onClick={() => retryGrading(activeStudent.id)} disabled={loading} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>🔄 重试</button>
+              {/* Photo upload for selected student */}
+              {activeStudent && <>
+                <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: "#555" }}>{activeStudent.name} 的作业照片</h4>
+                {activeStudent.status === "error" && <div style={{ background: "#fef2f2", border: "1px solid #f0c0c0", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+                  <span style={{ color: RED }}>❌ {activeStudent.errorMsg || "出错"}</span>
+                  <button onClick={() => retryGrading(activeStudent.id)} disabled={loading} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff", fontSize: 12, cursor: "pointer" }}>🔄 重试</button>
                 </div>}
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24, padding: 16, borderRadius: 12, border: dragOver ? "2px dashed " + PRIMARY : "2px dashed transparent", background: dragOver ? "#e8ecf4" : "transparent" }} onDrop={onDropImages} onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }} onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}>
-                  {activeStudent.imageUrls.map((url, i) => (<div key={i} onClick={() => setPreviewUrl(url)} style={{ width: 120, height: 160, borderRadius: 8, overflow: "hidden", border: "1px solid #ddd", position: "relative", cursor: "pointer", flexShrink: 0 }}><img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={e => { e.stopPropagation(); removeImage(activeStudent.id, i); }} style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button><div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 11, textAlign: "center", padding: 3 }}>{"第" + (i + 1) + "页"}</div></div>))}
-                  <div onClick={() => addFileInputRef.current?.click()} style={{ width: 120, height: 160, borderRadius: 8, border: "2px dashed #ccc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fff", color: "#bbb", flexShrink: 0 }}><span style={{ fontSize: 32, lineHeight: 1 }}>+</span><span style={{ fontSize: 12, marginTop: 4 }}>添加照片</span><input ref={addFileInputRef} type="file" accept="image/*" multiple onChange={onPickImages} style={{ display: "none" }} /></div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: 12, borderRadius: 10, border: dragOver ? "2px dashed " + PRIMARY : "1px dashed #ccc", background: dragOver ? "#e8ecf4" : "#fafafa", marginBottom: 12 }} onDrop={onDropImages} onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }} onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}>
+                  {activeStudent.imageUrls.map((url, i) => (<div key={i} onClick={() => setPreviewUrl(url)} style={{ width: 80, height: 105, borderRadius: 6, overflow: "hidden", border: "1px solid #ddd", position: "relative", cursor: "pointer", flexShrink: 0 }}><img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={e => { e.stopPropagation(); removeImage(activeStudent.id, i); }} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button><div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 9, textAlign: "center", padding: 2 }}>{"第" + (i + 1) + "页"}</div></div>))}
+                  <div onClick={() => addFileInputRef.current?.click()} style={{ width: 80, height: 105, borderRadius: 6, border: "2px dashed #ccc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fff", color: "#bbb", flexShrink: 0 }}><span style={{ fontSize: 24 }}>+</span><span style={{ fontSize: 10 }}>拖拽或点击</span><input ref={addFileInputRef} type="file" accept="image/*" multiple onChange={onPickImages} style={{ display: "none" }} /></div>
                 </div>
-                <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
-                  <div style={{ flex: 1 }}><label style={{ fontSize: 13, fontWeight: 600, color: "#666", display: "block", marginBottom: 6 }}>年级</label><select value={grade} onChange={e => setGrade(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ddd", fontSize: 14 }}>{["一年级上","一年级下","二年级上","二年级下","三年级上","三年级下","四年级上","四年级下","五年级上","五年级下","六年级上","六年级下"].map(g => <option key={g}>{g}</option>)}</select></div>
-                  <div style={{ flex: 1 }}><label style={{ fontSize: 13, fontWeight: 600, color: "#666", display: "block", marginBottom: 6 }}>主题</label><select value={topic} onChange={e => setTopic(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ddd", fontSize: 14 }}>{["看图写话","写人","记事","写景","状物","想象作文","日记","书信","读后感","中华传统节日","自由命题","童话","其他"].map(t => <option key={t}>{t}</option>)}</select></div>
-                </div>
-
-                {/* 特殊要求 */}
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "#666", display: "block", marginBottom: 6 }}>📝 本次特殊要求（选填）</label>
-                  <textarea value={specialReq} onChange={e => setSpecialReq(e.target.value)} placeholder="例如：这次写童话，注意想象力和拟人手法；重点检查标点符号；注意段落之间的过渡..." style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ddd", fontSize: 13, minHeight: 50, resize: "vertical", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
-                </div>
-
-                {/* 范文模板 */}
-                <div style={{ marginBottom: 16, padding: 14, borderRadius: 10, border: "1px dashed #ccc", background: "#fafafa" }}>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "#666", display: "block", marginBottom: 8 }}>📄 范文模板（选填，上传范文图片，AI 自动分析结构和技巧）</label>
-                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    {modelImageUrl ? (
-                      <div style={{ position: "relative", width: 80, height: 100, borderRadius: 6, overflow: "hidden", border: "1px solid #ddd", flexShrink: 0 }}>
-                        <img src={modelImageUrl} alt="范文" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        <button onClick={() => { setModelImageUrl(""); setModelText(""); }} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-                      </div>
-                    ) : (
-                      <button onClick={() => modelFileRef.current?.click()} style={{ width: 80, height: 100, borderRadius: 6, border: "2px dashed #ccc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fff", color: "#bbb", fontSize: 11, flexShrink: 0 }}>
-                        <span style={{ fontSize: 24 }}>+</span>
-                        <span>范文图片</span>
-                      </button>
-                    )}
-                    <input ref={modelFileRef} type="file" accept="image/*" onChange={analyzeModelEssay} style={{ display: "none" }} />
-                    <div style={{ flex: 1, fontSize: 12 }}>
-                      {modelLoading && <p style={{ color: ORANGE, fontWeight: 600 }}>🔄 正在分析范文结构...</p>}
-                      {modelText && !modelLoading && (
-                        <div style={{ background: "#fff", borderRadius: 6, padding: 8, border: "1px solid #e0e0e0", maxHeight: 120, overflow: "auto" }}>
-                          <p style={{ margin: 0, color: GREEN, fontWeight: 600, fontSize: 11, marginBottom: 4 }}>✅ 范文已分析</p>
-                          <p style={{ margin: 0, color: "#888", fontSize: 11, whiteSpace: "pre-wrap" }}>{typeof modelText === "string" && modelText.length > 200 ? modelText.slice(0, 200) + "..." : modelText}</p>
-                        </div>
-                      )}
-                      {!modelText && !modelLoading && <p style={{ color: "#bbb", margin: 0 }}>上传范文后，AI会分析每段的内容、修饰词和修辞手法，批改时作为参考</p>}
-                    </div>
-                  </div>
-                </div>
-                <button disabled={(activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading} onClick={runGrading} style={{ width: "100%", padding: 14, borderRadius: 10, border: "none", fontSize: 16, fontWeight: 700, color: "#fff", letterSpacing: 2, cursor: (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading ? "not-allowed" : "pointer", background: (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading ? "#ccc" : PRIMARY }}>{loading ? stepText || batchStatus : "开始批改（" + (activeStudent.images.length || activeStudent.imageUrls.length) + " 张照片）"}</button>
-                {loading && <div style={{ marginTop: 12 }}><div style={{ width: "100%", height: 6, borderRadius: 3, background: "#eee" }}><div style={{ width: progress + "%", height: "100%", borderRadius: 3, background: PRIMARY, transition: "width 0.5s" }} /></div><p style={{ fontSize: 12, color: "#888", textAlign: "center", marginTop: 6 }}>{progress}% · {stepText}</p></div>}
               </>}
+            </div>
+
+            {/* ====== RIGHT: Global grading settings ====== */}
+            <div style={{ flex: 1, padding: 20, borderRadius: 12, border: "1px solid #e0e0e0", background: "#fff", alignSelf: "flex-start" }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: PRIMARY, margin: "0 0 14px" }}>⚙️ 批改设置</h3>
+              <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 4 }}>年级</label><select value={grade} onChange={e => setGrade(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 13 }}>{["一年级上","一年级下","二年级上","二年级下","三年级上","三年级下","四年级上","四年级下","五年级上","五年级下","六年级上","六年级下"].map(g => <option key={g}>{g}</option>)}</select></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 4 }}>主题</label><select value={topic} onChange={e => setTopic(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 13 }}>{["看图写话","写人","记事","写景","状物","想象作文","日记","书信","读后感","中华传统节日","自由命题","童话","其他"].map(t => <option key={t}>{t}</option>)}</select></div>
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 4 }}>📝 特殊要求（选填）</label>
+                <textarea value={specialReq} onChange={e => setSpecialReq(e.target.value)} placeholder="例如：这次写童话，注意想象力和拟人手法…" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 12, minHeight: 40, resize: "vertical", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 6 }}>📄 范文模板（选填，可拖拽多张）</label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: 8, borderRadius: 8, border: modelDragOver ? "2px dashed " + PRIMARY : "1px dashed #ccc", background: modelDragOver ? "#e8ecf4" : "#fafafa", minHeight: 50 }}
+                  onDrop={onDropModelImages} onDragOver={e => { e.preventDefault(); e.stopPropagation(); setModelDragOver(true); }} onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setModelDragOver(false); }}>
+                  {modelImageUrls.map((url, i) => (
+                    <div key={i} onClick={() => setPreviewUrl(url)} style={{ width: 50, height: 65, borderRadius: 4, overflow: "hidden", border: "1px solid #ddd", position: "relative", cursor: "pointer", flexShrink: 0 }}>
+                      <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <button onClick={e => { e.stopPropagation(); removeModelImage(i); }} style={{ position: "absolute", top: 1, right: 1, width: 14, height: 14, borderRadius: "50%", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", cursor: "pointer", fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                    </div>
+                  ))}
+                  <div onClick={() => modelFileRef.current?.click()} style={{ width: 50, height: 65, borderRadius: 4, border: "2px dashed #ccc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fff", color: "#bbb", fontSize: 9, flexShrink: 0 }}>
+                    <span style={{ fontSize: 18 }}>+</span><span>范文</span>
+                  </div>
+                  <input ref={modelFileRef} type="file" accept="image/*" multiple onChange={onPickModelImages} style={{ display: "none" }} />
+                </div>
+                {modelImageUrls.length > 0 && <p style={{ fontSize: 11, color: "#999", marginTop: 4 }}>已添加 {modelImageUrls.length} 张范文，批改时自动对比</p>}
+                {modelText && <p style={{ fontSize: 11, color: GREEN, marginTop: 2 }}>✅ 范文已分析（复用中）</p>}
+              </div>
+
+              {/* Action buttons */}
+              {activeStudent && <button disabled={(activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading} onClick={runGrading} style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", fontSize: 14, fontWeight: 700, color: "#fff", cursor: (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading ? "not-allowed" : "pointer", background: (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading ? "#ccc" : PRIMARY, marginBottom: 8 }}>{loading ? stepText : "批改 " + activeStudent.name + "（" + (activeStudent.images.length || activeStudent.imageUrls.length) + " 张）"}</button>}
+              <button disabled={loading} onClick={runBatchGrading} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid " + PRIMARY, fontSize: 13, fontWeight: 600, color: PRIMARY, cursor: loading ? "not-allowed" : "pointer", background: "#fff" }}>🚀 一键批改全部待批改学生</button>
+              {loading && <div style={{ marginTop: 10 }}><div style={{ width: "100%", height: 5, borderRadius: 3, background: "#eee" }}><div style={{ width: progress + "%", height: "100%", borderRadius: 3, background: PRIMARY, transition: "width 0.5s" }} /></div><p style={{ fontSize: 11, color: "#888", textAlign: "center", marginTop: 4 }}>{progress}% · {stepText}</p></div>}
             </div>
           </div>
         )}

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "语文作业批改",
-  description: "AI批改语文作业",
+  title: "作文批改系统",
+  description: "智能作文批改系统",
 };
 
 export default function RootLayout({

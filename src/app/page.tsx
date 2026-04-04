@@ -577,8 +577,9 @@ export default function Home() {
       reader.readAsDataURL(file);
     });
   }
-  // Compress image to reduce size for API upload (max 1200px wide, JPEG quality 0.7)
-  function compressImage(file: File, maxWidth = 1200, quality = 0.7): Promise<string> {
+  // Compress image to reduce size for API upload (max 800px wide, JPEG quality 0.5)
+  // Vercel free tier limits API body to 4.5MB, so we compress aggressively
+  function compressImage(file: File, maxWidth = 800, quality = 0.5): Promise<string> {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -593,6 +594,24 @@ export default function Home() {
       };
       img.onerror = () => resolve(URL.createObjectURL(file));
       img.src = URL.createObjectURL(file);
+    });
+  }
+  // Re-compress a data URL before sending to API (handles old images stored at higher quality)
+  function recompressDataUrl(dataUrl: string, maxWidth = 800, quality = 0.5): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("no ctx")); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(blob => { if (blob) resolve(blob); else reject(new Error("toBlob failed")); }, "image/jpeg", quality);
+      };
+      img.onerror = () => reject(new Error("img load failed"));
+      img.src = dataUrl;
     });
   }
   async function onPickImages(e: React.ChangeEvent<HTMLInputElement>) {
@@ -669,20 +688,16 @@ export default function Home() {
     updateStudent(sid, { status: "grading", errorMsg: undefined });
     try {
       // Step 1: OCR model essay if needed (only first time)
-      // Split into batches of 2 images to avoid FUNCTION_PAYLOAD_TOO_LARGE
+      // Split into batches of 1 image to stay under Vercel 4.5MB body limit
       let modelAnalysis = modelText;
       if (modelImageUrls.length > 0 && !modelText) {
         onP?.(5, "正在识别范文...");
-        const BATCH_SIZE = 2;
         const ocrParts: string[] = [];
-        for (let bi = 0; bi < modelImageUrls.length; bi += BATCH_SIZE) {
-          const batch = modelImageUrls.slice(bi, bi + BATCH_SIZE);
-          onP?.(5 + Math.round((bi / modelImageUrls.length) * 10), `正在识别范文（${bi + 1}-${Math.min(bi + BATCH_SIZE, modelImageUrls.length)}/${modelImageUrls.length}张）...`);
+        for (let bi = 0; bi < modelImageUrls.length; bi++) {
+          onP?.(5 + Math.round((bi / modelImageUrls.length) * 10), `正在识别范文（${bi + 1}/${modelImageUrls.length}张）...`);
           const mfd = new FormData();
-          for (const url of batch) {
-            const res = await fetch(url); const blob = await res.blob();
-            mfd.append("images", new File([blob], "model.jpg", { type: "image/jpeg" }));
-          }
+          const blob = await recompressDataUrl(modelImageUrls[bi]);
+          mfd.append("images", new File([blob], "model.jpg", { type: "image/jpeg" }));
           const mr = await fetch("/api/ocr", { method: "POST", body: mfd });
           if (mr.ok) {
             const { ocrText: partOcr } = await mr.json();
@@ -701,21 +716,28 @@ export default function Home() {
         }
       }
 
-      // Step 2: OCR student essay (batch 2 images at a time)
+      // Step 2: OCR student essay (1 image at a time for Vercel body limit)
       onP?.(25, "正在OCR识别学生作文...");
       const imgSources: { blob: Blob; name: string }[] = [];
       if (stu.images.length > 0) {
-        for (const f of stu.images) imgSources.push({ blob: f, name: f.name });
+        // Fresh files: compress to blob before sending
+        for (const f of stu.images) {
+          const dataUrl = await compressImage(f);
+          const blob = await recompressDataUrl(dataUrl);
+          imgSources.push({ blob, name: f.name });
+        }
       } else {
-        for (const url of stu.imageUrls) { const res = await fetch(url); const blob = await res.blob(); imgSources.push({ blob, name: "image.jpg" }); }
+        // Stored dataURLs: recompress to ensure small enough for Vercel
+        for (const url of stu.imageUrls) {
+          const blob = await recompressDataUrl(url);
+          imgSources.push({ blob, name: "image.jpg" });
+        }
       }
       const stuOcrParts: string[] = [];
-      const STU_BATCH = 2;
-      for (let bi = 0; bi < imgSources.length; bi += STU_BATCH) {
-        const batch = imgSources.slice(bi, bi + STU_BATCH);
-        if (imgSources.length > STU_BATCH) onP?.(25 + Math.round((bi / imgSources.length) * 25), `正在识别第${bi + 1}-${Math.min(bi + STU_BATCH, imgSources.length)}/${imgSources.length}页...`);
+      for (let bi = 0; bi < imgSources.length; bi++) {
+        if (imgSources.length > 1) onP?.(25 + Math.round((bi / imgSources.length) * 25), `正在识别第${bi + 1}/${imgSources.length}页...`);
         const fd = new FormData();
-        for (const src of batch) fd.append("images", new File([src.blob], src.name, { type: src.blob.type || "image/jpeg" }));
+        fd.append("images", new File([imgSources[bi].blob], imgSources[bi].name, { type: imgSources[bi].blob.type || "image/jpeg" }));
         const r1 = await fetch("/api/ocr", { method: "POST", body: fd });
         if (!r1.ok) { const t = await r1.text(); throw new Error("OCR失败: " + (t || r1.statusText)); }
         const { ocrText: partOcr } = await r1.json();

@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 type TabName = "upload" | "detail" | "archive";
 type Tool = "pen" | "text" | "circle" | "wavy" | "eraser" | "hand" | "penEraser";
-interface Student { id: string; name: string; images: File[]; imageUrls: string[]; ocrText: string; essayDetail: any | null; report: string; status: "idle" | "grading" | "done" | "error"; errorMsg?: string; archived?: boolean; }
+interface Student { id: string; name: string; className: string; images: File[]; imageUrls: string[]; ocrText: string; essayDetail: any | null; report: string; status: "idle" | "grading" | "done" | "error"; errorMsg?: string; archived?: boolean; }
 interface DrawAction { type: "pen" | "text" | "circle" | "wavy"; color: string; lineWidth: number; points?: { x: number; y: number }[]; x?: number; y?: number; w?: number; h?: number; endX?: number; text?: string; fontSize?: number; }
 
 const PRIMARY = "#2c3e6b", RED = "#c0392b", GREEN = "#27ae60", ORANGE = "#e67e22", BG = "#faf8f5";
@@ -15,10 +15,9 @@ const QUICK_STAMPS = [
   { label: "分段", color: "#2980b9" },
 ];
 
-// ===== IndexedDB for images (reliable version) =====
+// ===== IndexedDB for images =====
 const DB_NAME = "hw_grader_img_v2";
 const DB_STORE = "imgs";
-
 function openImgDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
@@ -27,85 +26,27 @@ function openImgDB(): Promise<IDBDatabase> {
     req.onerror = () => reject(req.error);
   });
 }
-
-// Save one image as base64 data URL
 function saveOneImage(studentId: string, pageIdx: number, dataUrl: string): Promise<void> {
   return new Promise(async (resolve) => {
-    try {
-      const db = await openImgDB();
-      const tx = db.transaction(DB_STORE, "readwrite");
-      tx.objectStore(DB_STORE).put(dataUrl, studentId + "_img_" + pageIdx);
-      tx.oncomplete = () => { db.close(); resolve(); };
-      tx.onerror = () => { db.close(); resolve(); };
-    } catch { resolve(); }
+    try { const db = await openImgDB(); const tx = db.transaction(DB_STORE, "readwrite"); tx.objectStore(DB_STORE).put(dataUrl, studentId + "_img_" + pageIdx); tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = () => { db.close(); resolve(); }; } catch { resolve(); }
   });
 }
-
-// Save/load model essay images in IndexedDB
 function saveModelImage(idx: number, dataUrl: string): Promise<void> {
   return new Promise(async (resolve) => {
-    try {
-      const db = await openImgDB();
-      const tx = db.transaction(DB_STORE, "readwrite");
-      tx.objectStore(DB_STORE).put(dataUrl, "model_essay_img_" + idx);
-      tx.oncomplete = () => { db.close(); resolve(); };
-      tx.onerror = () => { db.close(); resolve(); };
-    } catch { resolve(); }
+    try { const db = await openImgDB(); const tx = db.transaction(DB_STORE, "readwrite"); tx.objectStore(DB_STORE).put(dataUrl, "model_essay_img_" + idx); tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = () => { db.close(); resolve(); }; } catch { resolve(); }
   });
 }
 async function loadModelImages(count: number): Promise<string[]> {
-  try {
-    const db = await openImgDB();
-    const results: string[] = [];
-    for (let i = 0; i < count; i++) {
-      const url = await new Promise<string>((resolve) => {
-        const tx = db.transaction(DB_STORE, "readonly");
-        const req = tx.objectStore(DB_STORE).get("model_essay_img_" + i);
-        req.onsuccess = () => resolve(req.result || "");
-        req.onerror = () => resolve("");
-      });
-      if (url) results.push(url);
-    }
-    db.close();
-    return results;
-  } catch { return []; }
+  try { const db = await openImgDB(); const r: string[] = []; for (let i = 0; i < count; i++) { const url = await new Promise<string>((res) => { const tx = db.transaction(DB_STORE, "readonly"); const rq = tx.objectStore(DB_STORE).get("model_essay_img_" + i); rq.onsuccess = () => res(rq.result || ""); rq.onerror = () => res(""); }); if (url) r.push(url); } db.close(); return r; } catch { return []; }
 }
 async function clearModelImages(count: number) {
-  try {
-    const db = await openImgDB();
-    const tx = db.transaction(DB_STORE, "readwrite");
-    for (let i = 0; i < count; i++) tx.objectStore(DB_STORE).delete("model_essay_img_" + i);
-    tx.oncomplete = () => db.close();
-  } catch {}
+  try { const db = await openImgDB(); const tx = db.transaction(DB_STORE, "readwrite"); for (let i = 0; i < count; i++) tx.objectStore(DB_STORE).delete("model_essay_img_" + i); tx.oncomplete = () => db.close(); } catch {}
 }
-
-// Load all images for a student
 async function loadStudentImages(studentId: string, count: number): Promise<string[]> {
-  try {
-    const db = await openImgDB();
-    const results: string[] = [];
-    for (let i = 0; i < count; i++) {
-      const url = await new Promise<string>((resolve) => {
-        const tx = db.transaction(DB_STORE, "readonly");
-        const req = tx.objectStore(DB_STORE).get(studentId + "_img_" + i);
-        req.onsuccess = () => resolve(req.result || "");
-        req.onerror = () => resolve("");
-      });
-      if (url) results.push(url);
-    }
-    db.close();
-    return results;
-  } catch { return []; }
+  try { const db = await openImgDB(); const r: string[] = []; for (let i = 0; i < count; i++) { const url = await new Promise<string>((res) => { const tx = db.transaction(DB_STORE, "readonly"); const rq = tx.objectStore(DB_STORE).get(studentId + "_img_" + i); rq.onsuccess = () => res(rq.result || ""); rq.onerror = () => res(""); }); if (url) r.push(url); } db.close(); return r; } catch { return []; }
 }
-
-// Delete all images for a student
 async function deleteStudentImages(studentId: string, count: number) {
-  try {
-    const db = await openImgDB();
-    const tx = db.transaction(DB_STORE, "readwrite");
-    for (let i = 0; i < count; i++) tx.objectStore(DB_STORE).delete(studentId + "_img_" + i);
-    tx.oncomplete = () => db.close();
-  } catch {}
+  try { const db = await openImgDB(); const tx = db.transaction(DB_STORE, "readwrite"); for (let i = 0; i < count; i++) tx.objectStore(DB_STORE).delete(studentId + "_img_" + i); tx.oncomplete = () => db.close(); } catch {}
 }
 
 export default function Home() {
@@ -115,7 +56,7 @@ export default function Home() {
   const [students, setStudents] = useState<Student[]>([]);
   const [activeStudentId, setActiveStudentId] = useState("");
   const [grade, setGrade] = useState("三年级下");
-  const [topic, setTopic] = useState("中华传统节日");
+  const [topic, setTopic] = useState("想象作文");
   const [specialReq, setSpecialReq] = useState("");
   const [modelText, setModelText] = useState("");
   const [modelImageUrls, setModelImageUrls] = useState<string[]>([]);
@@ -153,8 +94,13 @@ export default function Home() {
   const [actionMap, setActionMap] = useState<Record<string, DrawAction[]>>({});
   const [histMap, setHistMap] = useState<Record<string, DrawAction[][]>>({});
   const [histIdx, setHistIdx] = useState<Record<string, number>>({});
-  // Padding per student+page key
   const [padMap, setPadMap] = useState<Record<string, [number, number, number, number]>>({});
+  // Class management
+  const [classNames, setClassNames] = useState<string[]>(["默认班"]);
+  const [currentClass, setCurrentClass] = useState("默认班");
+  const [newClassName, setNewClassName] = useState("");
+  // Batch select
+  const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
 
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -165,10 +111,11 @@ export default function Home() {
 
   const activeStudent = students.find((s) => s.id === activeStudentId) || null;
   const pk = activeStudentId + "_" + pageIndex;
-  const pad = padMap[pk] || [0, 0, 0, 0]; // [top, bot, left, right]
+  const pad = padMap[pk] || [0, 0, 0, 0];
   const [padTop, padBot, padLeft, padRight] = pad;
+  // Students in current class (not archived)
+  const classStudents = students.filter(s => !s.archived && s.className === currentClass);
 
-  // Shift all annotations when padding changes
   function shiftAnnotations(dx: number, dy: number) {
     const acts = actionMap[pk] || [];
     if (acts.length === 0 || (dx === 0 && dy === 0)) return;
@@ -180,89 +127,62 @@ export default function Home() {
     });
     setActionMap(prev => ({ ...prev, [pk]: shifted }));
   }
-
   function setPad(idx: number, fn: (v: number) => number) {
-    const cur = padMap[pk] || [0,0,0,0];
-    const oldVal = cur[idx];
-    const newVal = fn(oldVal);
-    const diff = newVal - oldVal;
-    if (diff === 0) return;
-    // idx: 0=top, 1=bot, 2=left, 3=right
-    // When adding top padding, shift annotations down; adding left, shift right
-    const dx = idx === 2 ? diff : 0; // left padding changed
-    const dy = idx === 0 ? diff : 0; // top padding changed
-    shiftAnnotations(dx, dy);
+    const cur = padMap[pk] || [0,0,0,0]; const oldVal = cur[idx]; const newVal = fn(oldVal); const diff = newVal - oldVal; if (diff === 0) return;
+    const dx = idx === 2 ? diff : 0; const dy = idx === 0 ? diff : 0; shiftAnnotations(dx, dy);
     setPadMap(prev => { const next = [...(prev[pk] || [0,0,0,0])] as [number,number,number,number]; next[idx] = newVal; return { ...prev, [pk]: next }; });
   }
-  function resetPad() {
-    const cur = padMap[pk] || [0,0,0,0];
-    // Shift annotations back
-    shiftAnnotations(-cur[2], -cur[0]);
-    setPadMap(prev => ({ ...prev, [pk]: [0,0,0,0] }));
-  }
+  function resetPad() { const cur = padMap[pk] || [0,0,0,0]; shiftAnnotations(-cur[2], -cur[0]); setPadMap(prev => ({ ...prev, [pk]: [0,0,0,0] })); }
 
-  // === Data persistence: localStorage for text, IndexedDB for images ===
+  // === Persistence ===
   useEffect(() => {
     try {
-      const d = JSON.parse(localStorage.getItem("hw_grader_v7") || "{}");
+      const d = JSON.parse(localStorage.getItem("hw_grader_v8") || "{}");
       if (d.students) {
-        const loaded = d.students.map((s: any) => ({ ...s, images: [], imageUrls: [] }));
+        const loaded = d.students.map((s: any) => ({ ...s, images: [], imageUrls: [], className: s.className || "默认班" }));
         setStudents(loaded);
         setActiveStudentId(d.activeStudentId || "");
         if (d.grade) setGrade(d.grade);
         if (d.topic) setTopic(d.topic);
-        // Restore images from IndexedDB
+        if (d.specialReq) setSpecialReq(d.specialReq);
+        if (d.modelText) setModelText(d.modelText);
+        if (d.classNames?.length) setClassNames(d.classNames);
+        if (d.currentClass) setCurrentClass(d.currentClass);
         loaded.forEach((s: any) => {
           const imgCount = s.imageCount || 0;
           if (imgCount > 0) {
             loadStudentImages(s.id, imgCount).then(urls => {
-              const validUrls = urls.filter(u => u);
-              if (validUrls.length > 0) {
-                setStudents(prev => prev.map(st => st.id === s.id ? { ...st, imageUrls: validUrls } : st));
-              }
+              const valid = urls.filter(u => u);
+              if (valid.length > 0) setStudents(prev => prev.map(st => st.id === s.id ? { ...st, imageUrls: valid } : st));
             });
           }
         });
+        const modelImgCount = d.modelImageCount || 0;
+        if (modelImgCount > 0) loadModelImages(modelImgCount).then(urls => { const v = urls.filter(u => u); if (v.length > 0) setModelImageUrls(v); });
       }
       if (d.actionMap) setActionMap(d.actionMap);
       if (d.padMap) setPadMap(d.padMap);
-      if (d.specialReq) setSpecialReq(d.specialReq);
-      if (d.modelText) setModelText(d.modelText);
-      // Restore model essay images from IndexedDB
-      const modelImgCount = d.modelImageCount || 0;
-      if (modelImgCount > 0) {
-        loadModelImages(modelImgCount).then(urls => {
-          const valid = urls.filter(u => u);
-          if (valid.length > 0) setModelImageUrls(valid);
-        });
-      }
     } catch {}
   }, []);
   useEffect(() => {
     try {
-      // Save text data + imageCount (not the actual image data)
       const data = {
         students: students.map(s => ({ ...s, images: [], imageUrls: [], imageCount: s.imageUrls.length })),
         activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText,
-        modelImageCount: modelImageUrls.length,
+        modelImageCount: modelImageUrls.length, classNames, currentClass,
       };
-      localStorage.setItem("hw_grader_v7", JSON.stringify(data));
+      localStorage.setItem("hw_grader_v8", JSON.stringify(data));
     } catch {}
-  }, [students, activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText, modelImageUrls]);
+  }, [students, activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText, modelImageUrls, classNames, currentClass]);
 
-  // text wrap helper
+  // text wrap
   function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
     const out: string[] = [];
-    for (const raw of text.split("\n")) {
-      if (!raw) { out.push(""); continue; }
-      let cur = "";
-      for (const ch of raw) { if (ctx.measureText(cur + ch).width > maxW && cur) { out.push(cur); cur = ch; } else cur += ch; }
-      if (cur) out.push(cur);
-    }
+    for (const raw of text.split("\n")) { if (!raw) { out.push(""); continue; } let cur = ""; for (const ch of raw) { if (ctx.measureText(cur + ch).width > maxW && cur) { out.push(cur); cur = ch; } else cur += ch; } if (cur) out.push(cur); }
     return out;
   }
 
-  // ===== redraw (draws hover indicator on canvas instead of DOM) =====
+  // redraw
   const redraw = useCallback(() => {
     const cv = canvasRef.current; if (!cv) return;
     const ctx = cv.getContext("2d"); if (!ctx) return;
@@ -280,52 +200,40 @@ export default function Home() {
       else if (a.type === "text" && a.x != null && a.y != null && a.text) {
         const fs = a.fontSize || 18; ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; ctx.textBaseline = "top";
         const mw = a.w || (cssW - a.x - 10); const lines = wrapText(ctx, a.text, mw > 20 ? mw : 200);
-        // Draw semi-transparent white background behind text for readability
-        const textH = lines.length * fs * 1.4;
-        let maxLineW = 0; for (const l of lines) maxLineW = Math.max(maxLineW, ctx.measureText(l).width);
-        ctx.fillStyle = "rgba(255,255,255,0.82)";
-        ctx.fillRect(a.x - 2, a.y - 1, maxLineW + 4, textH + 2);
+        const textH = lines.length * fs * 1.4; let maxLineW = 0; for (const l of lines) maxLineW = Math.max(maxLineW, ctx.measureText(l).width);
+        ctx.fillStyle = "rgba(255,255,255,0.82)"; ctx.fillRect(a.x - 2, a.y - 1, maxLineW + 4, textH + 2);
         ctx.fillStyle = a.color;
         for (let li = 0; li < lines.length; li++) ctx.fillText(lines[li], a.x, a.y + li * (fs * 1.4));
       }
       else if (a.type === "wavy" && a.x != null && a.y != null && a.endX != null) { ctx.beginPath(); let wx = Math.min(a.x, a.endX); const mx = Math.max(a.x, a.endX); ctx.moveTo(wx, a.y); while (wx < mx) { ctx.quadraticCurveTo(wx + 4, a.y - 5, wx + 8, a.y); ctx.quadraticCurveTo(wx + 12, a.y + 5, wx + 16, a.y); wx += 16; } ctx.stroke(); }
     }
-    // Draw hover move indicator on canvas (no DOM flicker)
+    // hover indicator
     if (hoverIdx >= 0 && movingIdx < 0 && !textPos && tool !== "hand") {
-      const ha = acts[hoverIdx];
-      if (ha) {
-        const b = getActionBounds(ha);
-        if (b) {
-          // Dashed border around hovered item
-          ctx.strokeStyle = "rgba(44,62,107,0.35)"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
-          ctx.strokeRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8);
-          ctx.setLineDash([]);
-          // Move button at top-right of bounding box
-          const bx = b.x + b.w + 6, by = b.y - 4;
-          ctx.fillStyle = "rgba(44,62,107,0.9)";
-          // Compatible roundRect (works in all browsers)
-          const r = 5, bw = 26, bh = 24;
-          ctx.beginPath();
-          ctx.moveTo(bx + r, by); ctx.lineTo(bx + bw - r, by); ctx.arcTo(bx + bw, by, bx + bw, by + r, r);
-          ctx.lineTo(bx + bw, by + bh - r); ctx.arcTo(bx + bw, by + bh, bx + bw - r, by + bh, r);
-          ctx.lineTo(bx + r, by + bh); ctx.arcTo(bx, by + bh, bx, by + bh - r, r);
-          ctx.lineTo(bx, by + r); ctx.arcTo(bx, by, bx + r, by, r);
-          ctx.closePath(); ctx.fill();
-          ctx.fillStyle = "#fff"; ctx.font = "bold 14px sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "center";
-          ctx.fillText("✥", bx + 13, by + 13);
-          ctx.textAlign = "start";
-        }
-      }
+      const ha = acts[hoverIdx]; if (ha) { const b = getActionBounds(ha); if (b) {
+        ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = "rgba(44,62,107,0.4)"; ctx.lineWidth = 1;
+        ctx.strokeRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8); ctx.setLineDash([]);
+        const bx = b.x + b.w + 6, by = b.y - 4;
+        ctx.fillStyle = "rgba(44,62,107,0.85)"; ctx.beginPath();
+        const r = 4; const bw2 = 26, bh2 = 24;
+        ctx.moveTo(bx + r, by); ctx.lineTo(bx + bw2 - r, by); ctx.arcTo(bx + bw2, by, bx + bw2, by + r, r); ctx.lineTo(bx + bw2, by + bh2 - r); ctx.arcTo(bx + bw2, by + bh2, bx + bw2 - r, by + bh2, r); ctx.lineTo(bx + r, by + bh2); ctx.arcTo(bx, by + bh2, bx, by + bh2 - r, r); ctx.lineTo(bx, by + r); ctx.arcTo(bx, by, bx + r, by, r);
+        ctx.fill(); ctx.fillStyle = "#fff"; ctx.font = "bold 14px sans-serif"; ctx.textBaseline = "middle"; ctx.fillText("✥", bx + 5, by + bh2 / 2); ctx.restore();
+      }}
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionMap, pk, editIdx, textPos, hoverIdx, movingIdx, tool]);
+
   useEffect(() => { redraw(); }, [redraw]);
 
-  function syncCanvas() { const cv = canvasRef.current, im = imgRef.current; if (!cv || !im) return; const imgW = im.clientWidth; const imgH = im.clientHeight; if (!imgW || !imgH) return; const w = imgW + padLeft + padRight, h = imgH + padTop + padBot, dpr = window.devicePixelRatio || 1; cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + "px"; cv.style.height = h + "px"; redraw(); }
-  useEffect(() => { if (canvasRef.current) syncCanvas(); }, [padTop, padBot, padLeft, padRight]);
-
-  function gp(e: React.MouseEvent) { const cv = canvasRef.current; if (!cv) return { x: 0, y: 0 }; const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-  function pushAct(a: DrawAction) { const prev = actionMap[pk] || []; const next = [...prev, a]; setActionMap(p => ({ ...p, [pk]: next })); const h = histMap[pk] || [prev]; const i = histIdx[pk] ?? 0; const nh = [...h.slice(0, i + 1), next]; setHistMap(p => ({ ...p, [pk]: nh })); setHistIdx(p => ({ ...p, [pk]: nh.length - 1 })); }
-  function replaceAct(idx: number, a: DrawAction) { const prev = actionMap[pk] || []; const next = prev.map((old, i) => i === idx ? a : old); setActionMap(p => ({ ...p, [pk]: next })); const h = histMap[pk] || [prev]; const hi = histIdx[pk] ?? 0; const nh = [...h.slice(0, hi + 1), next]; setHistMap(p => ({ ...p, [pk]: nh })); setHistIdx(p => ({ ...p, [pk]: nh.length - 1 })); }
+  function syncCanvas() {
+    const cv = canvasRef.current, img = imgRef.current; if (!cv || !img) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = img.offsetWidth + padLeft + padRight, h = img.offsetHeight + padTop + padBot;
+    cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + "px"; cv.style.height = h + "px";
+    redraw();
+  }
+  function gp(e: React.MouseEvent<HTMLCanvasElement>) { const r = canvasRef.current!.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  function pushAct(a: DrawAction) { const acts = [...(actionMap[pk] || []), a]; setActionMap(pr => ({ ...pr, [pk]: acts })); const h = histMap[pk] || [actionMap[pk] || []]; const hi = histIdx[pk] ?? 0; const nh = [...h.slice(0, hi + 1), acts]; setHistMap(pr => ({ ...pr, [pk]: nh })); setHistIdx(pr => ({ ...pr, [pk]: nh.length - 1 })); }
+  function replaceAct(i: number, a: DrawAction) { const acts = [...(actionMap[pk] || [])]; acts[i] = a; setActionMap(pr => ({ ...pr, [pk]: acts })); const h = histMap[pk] || [actionMap[pk] || []]; const hi = histIdx[pk] ?? 0; const nh = [...h.slice(0, hi + 1), acts]; setHistMap(pr => ({ ...pr, [pk]: nh })); setHistIdx(pr => ({ ...pr, [pk]: nh.length - 1 })); }
   function deleteAct(idx: number) { const acts = (actionMap[pk] || []).filter((_, i) => i !== idx); setActionMap(pr => ({ ...pr, [pk]: acts })); const h = histMap[pk] || [actionMap[pk] || []]; const hi = histIdx[pk] ?? 0; const nh = [...h.slice(0, hi + 1), acts]; setHistMap(pr => ({ ...pr, [pk]: nh })); setHistIdx(pr => ({ ...pr, [pk]: nh.length - 1 })); }
   function saveToHistory() { const acts = actionMap[pk] || []; const h = histMap[pk] || []; const idx = histIdx[pk] ?? 0; const nh = [...h.slice(0, idx + 1), [...acts]]; setHistMap(pr => ({ ...pr, [pk]: nh })); setHistIdx(pr => ({ ...pr, [pk]: nh.length - 1 })); }
   function undo() { const h = histMap[pk], i = histIdx[pk] ?? 0; if (!h || i <= 0) return; setHistIdx(p => ({ ...p, [pk]: i - 1 })); setActionMap(p => ({ ...p, [pk]: h[i - 1] })); }
@@ -334,17 +242,8 @@ export default function Home() {
   function getActionBounds(a: DrawAction) {
     const cv = canvasRef.current; const ctx = cv?.getContext("2d");
     if (a.type === "text" && a.x != null && a.y != null) {
-      const fs = a.fontSize || 18;
-      let tw = 60, th = fs * 1.4;
-      if (ctx) {
-        ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`;
-        const dpr = window.devicePixelRatio || 1;
-        const cssW = cv ? cv.width / dpr : 700;
-        const mw = a.w || (cssW - a.x - 10);
-        const wrapped = wrapText(ctx, a.text || "", mw > 20 ? mw : 200);
-        tw = a.w || Math.max(...wrapped.map(l => ctx.measureText(l).width), 30);
-        th = wrapped.length * fs * 1.4;
-      }
+      const fs = a.fontSize || 18; let tw = 60, th = fs * 1.4;
+      if (ctx) { ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; const dpr = window.devicePixelRatio || 1; const cssW = cv ? cv.width / dpr : 700; const mw = a.w || (cssW - a.x - 10); const wrapped = wrapText(ctx, a.text || "", mw > 20 ? mw : 200); tw = a.w || Math.max(...wrapped.map(l => ctx.measureText(l).width), 30); th = wrapped.length * fs * 1.4; }
       return { x: a.x, y: a.y, w: tw, h: th };
     }
     if (a.type === "circle" && a.x != null && a.y != null && a.w != null && a.h != null) return { x: a.x, y: a.y, w: a.w, h: a.h };
@@ -352,51 +251,26 @@ export default function Home() {
     if (a.type === "wavy" && a.x != null && a.y != null && a.endX != null) { const mn = Math.min(a.x, a.endX); return { x: mn, y: a.y - 8, w: Math.abs(a.endX - a.x), h: 16 }; }
     return null;
   }
-
-  // Check if point is on the hover move button
   function isOnMoveBtn(px: number, py: number): number {
     const acts = actionMap[pk] || [];
-    for (let i = acts.length - 1; i >= 0; i--) {
-      const b = getActionBounds(acts[i]);
-      if (b) {
-        const bx = b.x + b.w + 6, by = b.y - 4;
-        if (px >= bx && px <= bx + 26 && py >= by && py <= by + 24) return i;
-      }
-    }
+    for (let i = acts.length - 1; i >= 0; i--) { const b = getActionBounds(acts[i]); if (b) { const bx = b.x + b.w + 6, by = b.y - 4; if (px >= bx && px <= bx + 26 && py >= by && py <= by + 24) return i; } }
     return -1;
   }
 
-  // Mouse
+  // Mouse handlers
   function mDown(e: React.MouseEvent<HTMLCanvasElement>) {
-    if (e.button !== 0) return;
-    const p = gp(e);
+    if (e.button !== 0) return; const p = gp(e);
     if (movingIdx >= 0) { saveToHistory(); setMovingIdx(-1); return; }
-    // Check if clicking on the canvas-drawn move button
-    if (hoverIdx >= 0 && movingIdx < 0) {
-      const btnHit = isOnMoveBtn(p.x, p.y);
-      if (btnHit >= 0) {
-        const a = (actionMap[pk] || [])[btnHit]; if (!a) return;
-        const b = getActionBounds(a); if (!b) return;
-        setMovingIdx(btnHit); setMovingOffset({ x: p.x - b.x, y: p.y - b.y });
-        return;
-      }
-    }
+    if (hoverIdx >= 0 && movingIdx < 0) { const btnHit = isOnMoveBtn(p.x, p.y); if (btnHit >= 0) { const a = (actionMap[pk] || [])[btnHit]; if (!a) return; const b = getActionBounds(a); if (!b) return; setMovingIdx(btnHit); setMovingOffset({ x: p.x - b.x, y: p.y - b.y }); return; } }
     if (pendingStamp) { pushAct({ type: "text", color: pendingStamp.color, lineWidth: penWidth, x: p.x, y: p.y, text: pendingStamp.label, fontSize }); setPendingStamp(null); return; }
-    if (tool === "hand") {
-      const wrap = document.getElementById("canvas-wrap");
-      if (wrap) { setHandDragging(true); setHandStart({ x: e.clientX, y: e.clientY, scrollX: wrap.scrollLeft, scrollY: wrap.scrollTop }); }
-      return;
-    }
+    if (tool === "hand") { const wrap = document.getElementById("canvas-wrap"); if (wrap) { setHandDragging(true); setHandStart({ x: e.clientX, y: e.clientY, scrollX: wrap.scrollLeft, scrollY: wrap.scrollTop }); } return; }
     if (tool === "pen") { setIsDrawing(true); setCurPoints([p]); }
     else if (tool === "circle" || tool === "wavy") { setIsDrawing(true); setDrawStart(p); }
     else if (tool === "text") {
       if (textClickTimer.current) clearTimeout(textClickTimer.current);
       if (textPos) { commitText(); setTool("pen"); return; }
       const clickP = { ...p };
-      textClickTimer.current = setTimeout(() => {
-        setEditIdx(-1); setTextPos({ x: clickP.x, y: clickP.y }); setTextVal(""); setTextBoxW(220);
-        setTimeout(() => txtRef.current?.focus(), 30);
-      }, 250);
+      textClickTimer.current = setTimeout(() => { setEditIdx(-1); setTextPos({ x: clickP.x, y: clickP.y }); setTextVal(""); setTextBoxW(220); setTimeout(() => txtRef.current?.focus(), 30); }, 250);
     }
     else if (tool === "eraser") { const acts = actionMap[pk] || []; const hi = hitTest(acts, p.x, p.y); if (hi >= 0) deleteAct(hi); }
     else if (tool === "penEraser") { setIsDrawing(true); erasePenAt(p.x, p.y); }
@@ -410,20 +284,14 @@ export default function Home() {
   }
   function mMove(e: React.MouseEvent<HTMLCanvasElement>) {
     const p = gp(e); setMousePos(p);
-    if (handDragging) {
-      const wrap = document.getElementById("canvas-wrap");
-      if (wrap) { wrap.scrollLeft = handStart.scrollX - (e.clientX - handStart.x); wrap.scrollTop = handStart.scrollY - (e.clientY - handStart.y); }
-      return;
-    }
+    if (handDragging) { const wrap = document.getElementById("canvas-wrap"); if (wrap) { wrap.scrollLeft = handStart.scrollX - (e.clientX - handStart.x); wrap.scrollTop = handStart.scrollY - (e.clientY - handStart.y); } return; }
     if (movingIdx >= 0) {
-      const acts = [...(actionMap[pk] || [])]; const a = { ...acts[movingIdx] };
-      const dx = p.x - movingOffset.x, dy = p.y - movingOffset.y;
+      const acts = [...(actionMap[pk] || [])]; const a = { ...acts[movingIdx] }; const dx = p.x - movingOffset.x, dy = p.y - movingOffset.y;
       if (a.type === "pen" && a.points) { const o = acts[movingIdx].points![0]; a.points = a.points.map(pt => ({ x: pt.x + (dx - o.x), y: pt.y + (dy - o.y) })); }
       else if (a.type === "circle" || a.type === "text") { a.x = dx; a.y = dy; }
       else if (a.type === "wavy") { const w = (a.endX || 0) - (a.x || 0); a.x = dx; a.y = dy; a.endX = dx + w; }
       acts[movingIdx] = a; setActionMap(pr => ({ ...pr, [pk]: acts })); return;
     }
-    // hover detect (extended right side to cover the move button area)
     const acts = actionMap[pk] || []; let found = -1;
     for (let i = acts.length - 1; i >= 0; i--) { const b = getActionBounds(acts[i]); if (b && p.x >= b.x - 10 && p.x <= b.x + b.w + 40 && p.y >= b.y - 10 && p.y <= b.y + b.h + 10) { found = i; break; } }
     setHoverIdx(found);
@@ -435,8 +303,7 @@ export default function Home() {
     else if (tool === "penEraser" && isDrawing) { erasePenAt(p.x, p.y); }
   }
   function mUp(e: React.MouseEvent<HTMLCanvasElement>) {
-    if (handDragging) { setHandDragging(false); return; }
-    if (movingIdx >= 0) return; if (!isDrawing) return; setIsDrawing(false); const p = gp(e);
+    if (handDragging) { setHandDragging(false); return; } if (movingIdx >= 0) return; if (!isDrawing) return; setIsDrawing(false); const p = gp(e);
     if (tool === "pen" && curPoints.length > 1) { pushAct({ type: "pen", color: strokeColor, lineWidth: penWidth, points: [...curPoints, p] }); setCurPoints([]); }
     else if (tool === "circle") { const w = p.x - drawStart.x, h = p.y - drawStart.y; if (Math.abs(w) > 5 && Math.abs(h) > 5) pushAct({ type: "circle", color: strokeColor, lineWidth: penWidth, x: drawStart.x, y: drawStart.y, w, h }); }
     else if (tool === "wavy") { if (Math.abs(p.x - drawStart.x) > 10) pushAct({ type: "wavy", color: strokeColor, lineWidth: penWidth, x: drawStart.x, y: drawStart.y, endX: p.x }); }
@@ -447,63 +314,25 @@ export default function Home() {
     else if (editIdx >= 0 && !textVal.trim()) deleteAct(editIdx);
     setTextPos(null); setTextVal(""); setEditIdx(-1);
   }
+  function erasePenAt(cx: number, cy: number) { const R = 10; const acts = actionMap[pk] || []; const newActs = [...acts]; let changed = false; for (let i = newActs.length - 1; i >= 0; i--) { const a = newActs[i]; if (a.type === "pen" && a.points) { const remaining = a.points.filter(p => Math.abs(p.x - cx) > R || Math.abs(p.y - cy) > R); if (remaining.length !== a.points.length) { changed = true; if (remaining.length < 2) newActs.splice(i, 1); else newActs[i] = { ...a, points: remaining }; } } } if (changed) setActionMap(pr => ({ ...pr, [pk]: newActs })); }
+  function hitTest(acts: DrawAction[], cx: number, cy: number) { const R = 20; const cv = canvasRef.current; const ctx = cv?.getContext("2d"); for (let i = acts.length - 1; i >= 0; i--) { const a = acts[i]; if (a.type === "pen" && a.points) { for (const p of a.points) if (Math.abs(p.x - cx) < R && Math.abs(p.y - cy) < R) return i; } else if (a.type === "circle" && a.x != null && a.w != null && a.y != null && a.h != null) { if (Math.abs(a.x + a.w / 2 - cx) < Math.abs(a.w) / 2 + R && Math.abs(a.y + a.h / 2 - cy) < Math.abs(a.h) / 2 + R) return i; } else if (a.type === "text" && a.x != null && a.y != null) { const fs = a.fontSize || 18; const lines = (a.text || "").split("\n"); let tw = a.w || 60; if (ctx) { ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; tw = a.w || Math.max(...lines.map(l => ctx.measureText(l).width), 30); } if (cx > a.x - R && cx < a.x + tw + R && cy > a.y - 10 && cy < a.y + lines.length * fs * 1.4 + 10) return i; } else if (a.type === "wavy" && a.x != null && a.endX != null && a.y != null) { if (cx > Math.min(a.x, a.endX) - R && cx < Math.max(a.x, a.endX) + R && Math.abs(cy - a.y) < R) return i; } } return -1; }
+  function hitTestText(acts: DrawAction[], cx: number, cy: number) { const cv = canvasRef.current; const ctx = cv?.getContext("2d"); for (let i = acts.length - 1; i >= 0; i--) { const a = acts[i]; if (a.type === "text" && a.x != null && a.y != null) { const fs = a.fontSize || 18; const lines = (a.text || "").split("\n"); let tw = a.w || 60; if (ctx) { ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; tw = a.w || Math.max(...lines.map(l => ctx.measureText(l).width), 30); } if (cx > a.x - 5 && cx < a.x + tw + 5 && cy > a.y - 5 && cy < a.y + lines.length * fs * 1.4 + 5) return i; } } return -1; }
 
-  function erasePenAt(cx: number, cy: number) {
-    const R = 10; const acts = actionMap[pk] || []; const newActs = [...acts]; let changed = false;
-    for (let i = newActs.length - 1; i >= 0; i--) {
-      const a = newActs[i];
-      if (a.type === "pen" && a.points) {
-        const remaining = a.points.filter(p => Math.abs(p.x - cx) > R || Math.abs(p.y - cy) > R);
-        if (remaining.length !== a.points.length) { changed = true; if (remaining.length < 2) newActs.splice(i, 1); else newActs[i] = { ...a, points: remaining }; }
-      }
-    }
-    if (changed) setActionMap(pr => ({ ...pr, [pk]: newActs }));
-  }
-
-  function hitTest(acts: DrawAction[], cx: number, cy: number) {
-    const R = 20; const cv = canvasRef.current; const ctx = cv?.getContext("2d");
-    for (let i = acts.length - 1; i >= 0; i--) { const a = acts[i];
-      if (a.type === "pen" && a.points) { for (const p of a.points) if (Math.abs(p.x - cx) < R && Math.abs(p.y - cy) < R) return i; }
-      else if (a.type === "circle" && a.x != null && a.w != null && a.y != null && a.h != null) { if (Math.abs(a.x + a.w / 2 - cx) < Math.abs(a.w) / 2 + R && Math.abs(a.y + a.h / 2 - cy) < Math.abs(a.h) / 2 + R) return i; }
-      else if (a.type === "text" && a.x != null && a.y != null) { const fs = a.fontSize || 18; const lines = (a.text || "").split("\n"); let tw = a.w || 60; if (ctx) { ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; tw = a.w || Math.max(...lines.map(l => ctx.measureText(l).width), 30); } if (cx > a.x - R && cx < a.x + tw + R && cy > a.y - 10 && cy < a.y + lines.length * fs * 1.4 + 10) return i; }
-      else if (a.type === "wavy" && a.x != null && a.endX != null && a.y != null) { if (cx > Math.min(a.x, a.endX) - R && cx < Math.max(a.x, a.endX) + R && Math.abs(cy - a.y) < R) return i; }
-    } return -1;
-  }
-  function hitTestText(acts: DrawAction[], cx: number, cy: number) {
-    const cv = canvasRef.current; const ctx = cv?.getContext("2d");
-    for (let i = acts.length - 1; i >= 0; i--) { const a = acts[i]; if (a.type === "text" && a.x != null && a.y != null) { const fs = a.fontSize || 18; const lines = (a.text || "").split("\n"); let tw = a.w || 60; if (ctx) { ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; tw = a.w || Math.max(...lines.map(l => ctx.measureText(l).width), 30); } if (cx > a.x - 5 && cx < a.x + tw + 5 && cy > a.y - 5 && cy < a.y + lines.length * fs * 1.4 + 5) return i; } }
-    return -1;
-  }
-
-  // Export (high quality, auto-crop empty padding)
+  // Export
   function exportOnePNG(studentId: string, pIdx: number): Promise<Blob | null> {
     return new Promise((resolve) => {
       const stu = students.find(s => s.id === studentId); if (!stu || !stu.imageUrls[pIdx]) { resolve(null); return; }
-      const pPad = padMap[studentId + "_" + pIdx] || [0,0,0,0];
-      const acts = actionMap[studentId + "_" + pIdx] || [];
+      const pPad = padMap[studentId + "_" + pIdx] || [0,0,0,0]; const acts = actionMap[studentId + "_" + pIdx] || [];
       const img = new Image(); img.crossOrigin = "anonymous";
       img.onload = () => {
         const cv = canvasRef.current; const displayImgW = cv ? parseFloat(cv.style.width) - pPad[2] - pPad[3] : img.naturalWidth;
         const scale = img.naturalWidth / (displayImgW || img.naturalWidth);
-
-        // Find the bounding box of all content (image + annotations)
-        let contentRight = img.naturalWidth + pPad[2] * scale;
-        let contentBottom = img.naturalHeight + pPad[0] * scale;
-        for (const a of acts) {
-          const b = getActionBounds(a);
-          if (b) {
-            contentRight = Math.max(contentRight, (b.x + b.w) * scale + 10);
-            contentBottom = Math.max(contentBottom, (b.y + b.h) * scale + 10);
-          }
-        }
-        // Canvas size: just enough to fit image + annotations, no extra empty padding
-        const totalW = Math.max(contentRight, img.naturalWidth);
-        const totalH = Math.max(contentBottom, img.naturalHeight + pPad[0] * scale);
-
+        let contentRight = img.naturalWidth + pPad[2] * scale, contentBottom = img.naturalHeight + pPad[0] * scale;
+        for (const a of acts) { const b = getActionBounds(a); if (b) { contentRight = Math.max(contentRight, (b.x + b.w) * scale + 10); contentBottom = Math.max(contentBottom, (b.y + b.h) * scale + 10); } }
+        const totalW = Math.max(contentRight, img.naturalWidth), totalH = Math.max(contentBottom, img.naturalHeight + pPad[0] * scale);
         const m = document.createElement("canvas"); m.width = totalW; m.height = totalH;
         const ctx = m.getContext("2d"); if (!ctx) { resolve(null); return; }
-        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, totalW, totalH);
-        ctx.drawImage(img, pPad[2] * scale, pPad[0] * scale);
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, totalW, totalH); ctx.drawImage(img, pPad[2] * scale, pPad[0] * scale);
         for (const a of acts) {
           ctx.strokeStyle = a.color; ctx.fillStyle = a.color; ctx.lineWidth = a.lineWidth * scale; ctx.lineCap = "round"; ctx.lineJoin = "round";
           if (a.type === "pen" && a.points && a.points.length > 1) { ctx.beginPath(); ctx.moveTo(a.points[0].x * scale, a.points[0].y * scale); for (let i = 1; i < a.points.length; i++) ctx.lineTo(a.points[i].x * scale, a.points[i].y * scale); ctx.stroke(); }
@@ -517,41 +346,13 @@ export default function Home() {
     });
   }
   function exportPNG() { if (!activeStudent) return; exportOnePNG(activeStudentId, pageIndex).then(blob => { if (!blob) return; const link = document.createElement("a"); link.download = "批注_" + activeStudent.name + "_" + (pageIndex + 1) + ".png"; link.href = URL.createObjectURL(blob); link.click(); }); }
-  // Copy image to clipboard (for pasting into WeChat)
-  async function copyImageToClipboard() {
-    if (!activeStudent) return;
-    const blob = await exportOnePNG(activeStudentId, pageIndex);
-    if (!blob) { alert("导出失败"); return; }
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      setCopyMsg("已复制图片，可粘贴到微信"); setTimeout(() => setCopyMsg(""), 2000);
-    } catch { alert("复制失败，请使用导出按钮下载后发送"); }
-  }
+  async function copyImageToClipboard() { if (!activeStudent) return; const blob = await exportOnePNG(activeStudentId, pageIndex); if (!blob) { alert("导出失败"); return; } try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); setCopyMsg("已复制图片，可粘贴到微信"); setTimeout(() => setCopyMsg(""), 2000); } catch { alert("复制失败，请使用导出按钮下载后发送"); } }
   async function exportAllPNGs() { const done = students.filter(s => s.status === "done"); if (done.length === 0) { alert("没有已批改的学生"); return; } for (const stu of done) { for (let i = 0; i < stu.imageUrls.length; i++) { const blob = await exportOnePNG(stu.id, i); if (blob) { const link = document.createElement("a"); link.download = stu.name + "_" + (i + 1) + ".png"; link.href = URL.createObjectURL(blob); link.click(); await new Promise(r => setTimeout(r, 300)); } } } }
 
-  // === Data export/import (backup & restore) ===
-  function exportData() {
-    const data = { students: students.map(s => ({ ...s, images: [] })), actionMap, padMap, grade, topic, version: "v5" };
-    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
-    const link = document.createElement("a"); link.download = "批改数据_" + new Date().toLocaleDateString("zh-CN") + ".json"; link.href = URL.createObjectURL(blob); link.click();
-  }
+  // Backup / Restore
+  function exportData() { const data = { students: students.map(s => ({ ...s, images: [] })), actionMap, padMap, grade, topic, classNames, currentClass, version: "v6" }; const blob = new Blob([JSON.stringify(data)], { type: "application/json" }); const link = document.createElement("a"); link.download = "批改数据_" + new Date().toLocaleDateString("zh-CN") + ".json"; link.href = URL.createObjectURL(blob); link.click(); }
   const importFileRef = useRef<HTMLInputElement>(null);
-  function importData(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result as string);
-        if (data.students) { setStudents(data.students.map((s: any) => ({ ...s, images: [] }))); setActiveStudentId(data.students[0]?.id || ""); }
-        if (data.actionMap) setActionMap(data.actionMap);
-        if (data.padMap) setPadMap(data.padMap);
-        if (data.grade) setGrade(data.grade);
-        if (data.topic) setTopic(data.topic);
-        setCopyMsg("数据导入成功！"); setTimeout(() => setCopyMsg(""), 2000);
-      } catch { alert("数据文件格式错误"); }
-    };
-    reader.readAsText(file); e.target.value = "";
-  }
+  function importData(e: React.ChangeEvent<HTMLInputElement>) { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const data = JSON.parse(reader.result as string); if (data.students) { setStudents(data.students.map((s: any) => ({ ...s, images: [], className: s.className || "默认班" }))); setActiveStudentId(data.students[0]?.id || ""); } if (data.actionMap) setActionMap(data.actionMap); if (data.padMap) setPadMap(data.padMap); if (data.grade) setGrade(data.grade); if (data.topic) setTopic(data.topic); if (data.classNames) setClassNames(data.classNames); if (data.currentClass) setCurrentClass(data.currentClass); setCopyMsg("数据导入成功！"); setTimeout(() => setCopyMsg(""), 2000); } catch { alert("数据文件格式错误"); } }; reader.readAsText(file); e.target.value = ""; }
 
   useEffect(() => { function onKey(e: KeyboardEvent) {
     const tag = (e.target as HTMLElement)?.tagName;
@@ -563,132 +364,70 @@ export default function Home() {
     if (toolKeys[e.key] && !e.ctrlKey && !e.metaKey) { setTool(toolKeys[e.key]); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }
   } window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); });
 
-  // Student management (with IndexedDB image save)
-  function addStudent() { if (!newName.trim()) { alert("请输入学生姓名"); return; } const s: Student = { id: uid(), name: newName.trim(), images: [], imageUrls: [], ocrText: "", essayDetail: null, report: "", status: "idle" }; setStudents(prev => [...prev, s]); setActiveStudentId(s.id); setNewName(""); }
-  function removeStudent(id: string) { const stu = students.find(s => s.id === id); deleteStudentImages(id, stu?.imageUrls.length || 10); setStudents(prev => prev.filter(s => s.id !== id)); if (activeStudentId === id) setActiveStudentId(students.find(s => s.id !== id && !s.archived)?.id || ""); setLoading(false); setProgress(0); setStepText(""); setBatchStatus(""); }
-  function archiveStudent(id: string) { setStudents(prev => prev.map(s => s.id === id ? { ...s, archived: true } : s)); if (activeStudentId === id) setActiveStudentId(students.find(s => s.id !== id && !s.archived)?.id || ""); }
+  // Student management
+  function addStudent() { if (!newName.trim()) { alert("请输入学生姓名"); return; } const s: Student = { id: uid(), name: newName.trim(), className: currentClass, images: [], imageUrls: [], ocrText: "", essayDetail: null, report: "", status: "idle" }; setStudents(prev => [...prev, s]); setActiveStudentId(s.id); setNewName(""); }
+  function removeStudent(id: string) { const stu = students.find(s => s.id === id); deleteStudentImages(id, stu?.imageUrls.length || 10); setStudents(prev => prev.filter(s => s.id !== id)); if (activeStudentId === id) setActiveStudentId(classStudents.find(s => s.id !== id)?.id || ""); setLoading(false); setProgress(0); setStepText(""); setBatchStatus(""); }
+  function archiveStudent(id: string) { setStudents(prev => prev.map(s => s.id === id ? { ...s, archived: true } : s)); if (activeStudentId === id) setActiveStudentId(classStudents.find(s => s.id !== id)?.id || ""); }
   function unarchiveStudent(id: string) { setStudents(prev => prev.map(s => s.id === id ? { ...s, archived: false } : s)); }
-  // Convert File to base64 data URL
-  function fileToDataURL(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-  }
-  // Compress image to reduce size for API upload (max 800px wide, JPEG quality 0.5)
-  // Vercel free tier limits API body to 4.5MB, so we compress aggressively
+
   function compressImage(file: File, maxWidth = 800, quality = 0.5): Promise<string> {
     return new Promise((resolve) => {
       const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let w = img.width, h = img.height;
-        if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) { resolve(URL.createObjectURL(file)); return; }
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.onerror = () => resolve(URL.createObjectURL(file));
-      img.src = URL.createObjectURL(file);
+      img.onload = () => { const canvas = document.createElement("canvas"); let w = img.width, h = img.height; if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; } canvas.width = w; canvas.height = h; const ctx = canvas.getContext("2d"); if (!ctx) { resolve(URL.createObjectURL(file)); return; } ctx.drawImage(img, 0, 0, w, h); resolve(canvas.toDataURL("image/jpeg", quality)); };
+      img.onerror = () => resolve(URL.createObjectURL(file)); img.src = URL.createObjectURL(file);
     });
   }
-  // Re-compress a data URL before sending to API (handles old images stored at higher quality)
   function recompressDataUrl(dataUrl: string, maxWidth = 800, quality = 0.5): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let w = img.width, h = img.height;
-        if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) { reject(new Error("no ctx")); return; }
-        ctx.drawImage(img, 0, 0, w, h);
-        canvas.toBlob(blob => { if (blob) resolve(blob); else reject(new Error("toBlob failed")); }, "image/jpeg", quality);
-      };
-      img.onerror = () => reject(new Error("img load failed"));
-      img.src = dataUrl;
+      img.onload = () => { const canvas = document.createElement("canvas"); let w = img.width, h = img.height; if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; } canvas.width = w; canvas.height = h; const ctx = canvas.getContext("2d"); if (!ctx) { reject(new Error("no ctx")); return; } ctx.drawImage(img, 0, 0, w, h); canvas.toBlob(blob => { if (blob) resolve(blob); else reject(new Error("toBlob failed")); }, "image/jpeg", quality); };
+      img.onerror = () => reject(new Error("img load failed")); img.src = dataUrl;
     });
   }
+
   async function onPickImages(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []); if (files.length === 0 || !activeStudentId) return;
-    const stu = students.find(s => s.id === activeStudentId);
-    const existingCount = stu?.imageUrls.length || 0;
+    const stu = students.find(s => s.id === activeStudentId); const existingCount = stu?.imageUrls.length || 0;
     const dataUrls: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const dataUrl = await compressImage(files[i]);
-      dataUrls.push(dataUrl);
-      await saveOneImage(activeStudentId, existingCount + i, dataUrl);
-    }
-    setStudents(prev => prev.map(s => s.id !== activeStudentId ? s : { ...s, images: [...s.images, ...files], imageUrls: [...s.imageUrls, ...dataUrls] }));
-    e.target.value = "";
+    for (let i = 0; i < files.length; i++) { const dataUrl = await compressImage(files[i]); dataUrls.push(dataUrl); await saveOneImage(activeStudentId, existingCount + i, dataUrl); }
+    setStudents(prev => prev.map(s => s.id !== activeStudentId ? s : { ...s, images: [...s.images, ...files], imageUrls: [...s.imageUrls, ...dataUrls] })); e.target.value = "";
   }
   async function onDropImages(e: React.DragEvent) {
     e.preventDefault(); e.stopPropagation(); setDragOver(false); if (!activeStudentId) return;
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")); if (files.length === 0) return;
-    const stu = students.find(s => s.id === activeStudentId);
-    const existingCount = stu?.imageUrls.length || 0;
+    const stu = students.find(s => s.id === activeStudentId); const existingCount = stu?.imageUrls.length || 0;
     const dataUrls: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const dataUrl = await compressImage(files[i]);
-      dataUrls.push(dataUrl);
-      await saveOneImage(activeStudentId, existingCount + i, dataUrl);
-    }
+    for (let i = 0; i < files.length; i++) { const dataUrl = await compressImage(files[i]); dataUrls.push(dataUrl); await saveOneImage(activeStudentId, existingCount + i, dataUrl); }
     setStudents(prev => prev.map(s => s.id !== activeStudentId ? s : { ...s, images: [...s.images, ...files], imageUrls: [...s.imageUrls, ...dataUrls] }));
   }
   function removeImage(sid: string, idx: number) { setStudents(prev => prev.map(s => { if (s.id !== sid) return s; return { ...s, images: s.images.filter((_, i) => i !== idx), imageUrls: s.imageUrls.filter((_, i) => i !== idx) }; })); }
   function updateStudent(id: string, d: Partial<Student>) { setStudents(prev => prev.map(s => s.id === id ? { ...s, ...d } : s)); }
 
-  // === Model essay (范文) image handlers ===
+  // Model essay handlers
   async function onPickModelImages(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []); if (files.length === 0) return;
-    const existingCount = modelImageUrls.length;
-    const dataUrls: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const url = await compressImage(files[i]);
-      dataUrls.push(url);
-      await saveModelImage(existingCount + i, url);
-    }
-    setModelFiles(prev => [...prev, ...files]);
-    setModelImageUrls(prev => [...prev, ...dataUrls]);
-    e.target.value = "";
+    const existingCount = modelImageUrls.length; const dataUrls: string[] = [];
+    for (let i = 0; i < files.length; i++) { const url = await compressImage(files[i]); dataUrls.push(url); await saveModelImage(existingCount + i, url); }
+    setModelFiles(prev => [...prev, ...files]); setModelImageUrls(prev => [...prev, ...dataUrls]); e.target.value = "";
   }
   async function onDropModelImages(e: React.DragEvent) {
     e.preventDefault(); e.stopPropagation(); setModelDragOver(false);
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")); if (files.length === 0) return;
-    const existingCount = modelImageUrls.length;
-    const dataUrls: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const url = await compressImage(files[i]);
-      dataUrls.push(url);
-      await saveModelImage(existingCount + i, url);
-    }
-    setModelFiles(prev => [...prev, ...files]);
-    setModelImageUrls(prev => [...prev, ...dataUrls]);
+    const existingCount = modelImageUrls.length; const dataUrls: string[] = [];
+    for (let i = 0; i < files.length; i++) { const url = await compressImage(files[i]); dataUrls.push(url); await saveModelImage(existingCount + i, url); }
+    setModelFiles(prev => [...prev, ...files]); setModelImageUrls(prev => [...prev, ...dataUrls]);
   }
   async function removeModelImage(idx: number) {
-    const newUrls = modelImageUrls.filter((_, i) => i !== idx);
-    setModelFiles(prev => prev.filter((_, i) => i !== idx));
-    setModelImageUrls(newUrls);
-    setModelText("");
-    // Re-save all model images to IndexedDB with correct indices
-    await clearModelImages(modelImageUrls.length);
-    for (let i = 0; i < newUrls.length; i++) {
-      await saveModelImage(i, newUrls[i]);
-    }
+    const newUrls = modelImageUrls.filter((_, i) => i !== idx); setModelFiles(prev => prev.filter((_, i) => i !== idx)); setModelImageUrls(newUrls); setModelText("");
+    await clearModelImages(modelImageUrls.length); for (let i = 0; i < newUrls.length; i++) await saveModelImage(i, newUrls[i]);
   }
 
-  // Grading with error recovery
+  // Grading
   async function gradeOneStudent(sid: string, onP?: (p: number, t: string) => void) {
     const stu = students.find(s => s.id === sid); if (!stu || stu.images.length === 0 && stu.imageUrls.length === 0) return;
     updateStudent(sid, { status: "grading", errorMsg: undefined });
     try {
-      // Step 1: OCR model essay if needed (only first time)
-      // Split into batches of 1 image to stay under Vercel 4.5MB body limit
+      // Step 1: OCR model essay (1 image at a time, only first time)
       let modelAnalysis = modelText;
       if (modelImageUrls.length > 0 && !modelText) {
         onP?.(5, "正在识别范文...");
@@ -699,74 +438,72 @@ export default function Home() {
           const blob = await recompressDataUrl(modelImageUrls[bi]);
           mfd.append("images", new File([blob], "model.jpg", { type: "image/jpeg" }));
           const mr = await fetch("/api/ocr", { method: "POST", body: mfd });
-          if (mr.ok) {
-            const { ocrText: partOcr } = await mr.json();
-            if (partOcr) ocrParts.push(partOcr);
-          }
+          if (mr.ok) { const { ocrText: partOcr } = await mr.json(); if (partOcr) ocrParts.push(partOcr); }
         }
         const modelOcr = ocrParts.join("\n\n");
         if (modelOcr.trim()) {
           onP?.(15, "范文识别完成，正在分析范文...");
           const mr2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText: modelOcr, gradeInfo: grade + " " + topic, isModelEssay: true }) });
-          if (mr2.ok) {
-            const analysis = await mr2.json();
-            modelAnalysis = typeof analysis === "string" ? analysis : JSON.stringify(analysis, null, 2);
-            setModelText(modelAnalysis);
-          }
+          if (mr2.ok) { const analysis = await mr2.json(); modelAnalysis = typeof analysis === "string" ? analysis : JSON.stringify(analysis, null, 2); setModelText(modelAnalysis); }
         }
       }
-
-      // Step 2: OCR student essay (1 image at a time for Vercel body limit)
+      // Step 2: OCR student essay (1 image at a time)
       onP?.(25, "正在OCR识别学生作文...");
       const imgSources: { blob: Blob; name: string }[] = [];
-      if (stu.images.length > 0) {
-        // Fresh files: compress to blob before sending
-        for (const f of stu.images) {
-          const dataUrl = await compressImage(f);
-          const blob = await recompressDataUrl(dataUrl);
-          imgSources.push({ blob, name: f.name });
-        }
-      } else {
-        // Stored dataURLs: recompress to ensure small enough for Vercel
-        for (const url of stu.imageUrls) {
-          const blob = await recompressDataUrl(url);
-          imgSources.push({ blob, name: "image.jpg" });
-        }
-      }
+      if (stu.images.length > 0) { for (const f of stu.images) { const dataUrl = await compressImage(f); const blob = await recompressDataUrl(dataUrl); imgSources.push({ blob, name: f.name }); } }
+      else { for (const url of stu.imageUrls) { const blob = await recompressDataUrl(url); imgSources.push({ blob, name: "image.jpg" }); } }
       const stuOcrParts: string[] = [];
       for (let bi = 0; bi < imgSources.length; bi++) {
         if (imgSources.length > 1) onP?.(25 + Math.round((bi / imgSources.length) * 25), `正在识别第${bi + 1}/${imgSources.length}页...`);
-        const fd = new FormData();
-        fd.append("images", new File([imgSources[bi].blob], imgSources[bi].name, { type: imgSources[bi].blob.type || "image/jpeg" }));
+        const fd = new FormData(); fd.append("images", new File([imgSources[bi].blob], imgSources[bi].name, { type: imgSources[bi].blob.type || "image/jpeg" }));
         const r1 = await fetch("/api/ocr", { method: "POST", body: fd });
         if (!r1.ok) { const t = await r1.text(); throw new Error("OCR失败: " + (t || r1.statusText)); }
-        const { ocrText: partOcr } = await r1.json();
-        if (partOcr) stuOcrParts.push(partOcr);
+        const { ocrText: partOcr } = await r1.json(); if (partOcr) stuOcrParts.push(partOcr);
       }
-      const ocrText = stuOcrParts.join("\n\n");
-      updateStudent(sid, { ocrText });
-
-      // Step 3: AI grading with model + special requirements
+      const ocrText = stuOcrParts.join("\n\n"); updateStudent(sid, { ocrText });
+      // Step 3: AI grading
       onP?.(55, "文字识别完成，正在AI精批...");
       const r2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText, gradeInfo: grade + " " + topic, modelAnalysis: modelAnalysis || undefined, specialRequirement: specialReq || undefined }) });
       if (!r2.ok) { const t = await r2.text(); throw new Error("精批失败: " + (t || r2.statusText)); }
-      const essayDetail = await r2.json(); updateStudent(sid, { essayDetail, status: "done" });
-      onP?.(100, "批改完成！");
+      const essayDetail = await r2.json(); updateStudent(sid, { essayDetail, status: "done" }); onP?.(100, "批改完成！");
     } catch (err: any) { updateStudent(sid, { status: "error", errorMsg: err.message || "未知错误" }); throw err; }
   }
-  async function runGrading() { if (!activeStudent || (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0)) { alert("请先上传作业照片"); return; } setLoading(true); setProgress(0); setStepText("准备中..."); try { await gradeOneStudent(activeStudentId, (p, t) => { setProgress(p); setStepText(t); }); setTab("detail"); } catch (err: any) { /* error stored in student */ } finally { setLoading(false); } }
+  async function runGrading() { if (!activeStudent || (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0)) { alert("请先上传作业照片"); return; } setLoading(true); setProgress(0); setStepText("准备中..."); try { await gradeOneStudent(activeStudentId, (p, t) => { setProgress(p); setStepText(t); }); setTab("detail"); } catch {} finally { setLoading(false); } }
   async function retryGrading(sid: string) { setLoading(true); setProgress(0); setStepText("重试中..."); try { await gradeOneStudent(sid, (p, t) => { setProgress(p); setStepText(t); }); setTab("detail"); } catch {} finally { setLoading(false); } }
-  async function runBatchGrading() { const toGrade = students.filter(s => (s.images.length > 0 || s.imageUrls.length > 0) && s.status !== "done"); if (toGrade.length === 0) { alert("没有待批改的学生"); return; } setLoading(true); let done = 0; for (const stu of toGrade) { setBatchStatus(`正在批改 ${stu.name}（${done + 1}/${toGrade.length}）...`); const base = Math.round((done / toGrade.length) * 100); try { await gradeOneStudent(stu.id, (p) => { setProgress(base + Math.round((p / 100) * (100 / toGrade.length))); }); } catch {} done++; } setProgress(100); setBatchStatus(`全部完成！共批改 ${done} 位学生`); setLoading(false); setTab("detail"); setTimeout(() => setBatchStatus(""), 3000); }
+  async function runBatchGrading() {
+    // Use selected students if any, otherwise all pending in current class
+    let toGrade: Student[];
+    if (selectedForBatch.size > 0) {
+      toGrade = students.filter(s => selectedForBatch.has(s.id) && (s.images.length > 0 || s.imageUrls.length > 0));
+    } else {
+      toGrade = classStudents.filter(s => (s.images.length > 0 || s.imageUrls.length > 0) && s.status !== "done");
+    }
+    if (toGrade.length === 0) { alert("没有待批改的学生"); return; }
+    setLoading(true); let done = 0;
+    for (const stu of toGrade) {
+      setBatchStatus(`正在批改 ${stu.name}（${done + 1}/${toGrade.length}）...`);
+      const base = Math.round((done / toGrade.length) * 100);
+      try { await gradeOneStudent(stu.id, (p) => { setProgress(base + Math.round((p / 100) * (100 / toGrade.length))); }); } catch {}
+      done++;
+    }
+    setProgress(100); setBatchStatus(`全部完成！共批改 ${done} 位学生`); setLoading(false); setSelectedForBatch(new Set()); setTab("detail"); setTimeout(() => setBatchStatus(""), 3000);
+  }
 
   // Copy helpers
   function clipCopy(text: string, msg?: string) { navigator.clipboard.writeText(text).then(() => { setCopyMsg(msg || "已复制！"); setTimeout(() => setCopyMsg(""), 1500); }); }
-  function copyOneCorrection(c: any) { clipCopy(c.text, "已复制批注"); }
+  function copyOneCorrection(c: any) { clipCopy(c.text + (c.suggested ? " → " + c.suggested : ""), "已复制批注"); }
   function copyOneSuggested(c: any) { clipCopy(c.suggested, "已复制建议"); }
   function copyAllHighlights() { if (!activeStudent?.essayDetail?.highlights) return; clipCopy(activeStudent.essayDetail.highlights.map((h: any, i: number) => `${i + 1}. ${h.title}：${h.description}`).join("\n"), "已复制亮点"); }
   function copyAllTips() { if (!activeStudent?.essayDetail?.improvement_tips) return; clipCopy(activeStudent.essayDetail.improvement_tips.join("\n"), "已复制改进方向"); }
   function copyTeacherComment() { if (!activeStudent?.essayDetail?.teacher_comment) return; clipCopy(activeStudent.essayDetail.teacher_comment, "已复制总评"); }
-  function copyAllDetail() { if (!activeStudent?.essayDetail) return; const d = activeStudent.essayDetail; let t = `【${activeStudent.name} 作文批改】\n\n━━ 批注 ━━\n`; (d.corrections || []).forEach((c: any, i: number) => { t += `${i + 1}. [${c.paragraph}] ${c.text}${c.suggested ? " → " + c.suggested : ""}\n`; }); t += `\n━━ 亮点 ━━\n`; (d.highlights || []).forEach((h: any, i: number) => { t += `${i + 1}. ${h.title}：${h.description}\n`; }); const lb: Record<string, string> = { content: "内容", structure: "结构", language: "语言", writing: "书写" }; if (d.dimensions) { t += `\n━━ 四维评价 ━━\n`; Object.entries(d.dimensions as Record<string, string>).forEach(([k, v]) => { t += `${lb[k] || k}：${v}\n`; }); } if (d.teacher_comment) t += `\n━━ 教师总评 ━━\n${d.teacher_comment}\n`; if (d.improvement_tips) { t += `\n━━ 改进方向 ━━\n`; d.improvement_tips.forEach((tip: string) => t += `${tip}\n`); } clipCopy(t, "已复制全部"); }
-  function generateParentNotice() { if (!activeStudent?.essayDetail) return; const d = activeStudent.essayDetail; const name = activeStudent.name; let t = `【${name}作文反馈】\n✨ 亮点：${(d.highlights || []).map((h: any) => h.title).join("、")}\n📝 需改进${(d.corrections || []).filter((c: any) => c.type === "fix").length}处，已在作文上标注\n`; if (d.teacher_comment) t += `💬 ${d.teacher_comment.slice(0, 60)}${d.teacher_comment.length > 60 ? "..." : ""}\n`; t += `请家长督促孩子看批注并改正，感谢配合！`; setParentNotice(t); }
+  function copyModelSuggestion(s: any) { clipCopy(`学生原句：${s.student_text}\n范文参考：${s.model_text}\n建议：${s.suggestion}`, "已复制范文建议"); }
+  function copyAllDetail() { if (!activeStudent?.essayDetail) return; const d = activeStudent.essayDetail; let t = `【${activeStudent.name} 作文批改】\n\n━━ 批注 ━━\n`; (d.corrections || []).forEach((c: any, i: number) => { t += `${i + 1}. [${c.paragraph}] ${c.text}${c.suggested ? " → " + c.suggested : ""}\n`; }); if (d.model_suggestions?.length > 0) { t += `\n━━ 范文对比建议 ━━\n`; d.model_suggestions.forEach((s: any, i: number) => { t += `${i + 1}. [${s.paragraph}] ${s.suggestion}\n`; }); } t += `\n━━ 亮点 ━━\n`; (d.highlights || []).forEach((h: any, i: number) => { t += `${i + 1}. ${h.title}：${h.description}\n`; }); if (d.teacher_comment) t += `\n━━ 教师总评 ━━\n${d.teacher_comment}\n`; if (d.improvement_tips) { t += `\n━━ 改进方向 ━━\n`; d.improvement_tips.forEach((tip: string) => t += `${tip}\n`); } clipCopy(t, "已复制全部"); }
+  function generateParentNotice() { if (!activeStudent?.essayDetail) return; const d = activeStudent.essayDetail; const name = activeStudent.name; let t = `【${name}作文反馈】\n✨ 亮点：${(d.highlights || []).map((h: any) => h.title).join("、")}\n📝 需改进${(d.corrections || []).filter((c: any) => c.type === "fix").length}处，已在作文上标注\n`; if (d.teacher_comment) t += `💬 ${d.teacher_comment}\n`; t += `请家长督促孩子看批注并改正，感谢配合！`; setParentNotice(t); }
+
+  // Toggle select for batch
+  function toggleBatchSelect(id: string) { setSelectedForBatch(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
+  function selectAllForBatch() { const ids = classStudents.filter(s => (s.images.length > 0 || s.imageUrls.length > 0)).map(s => s.id); setSelectedForBatch(new Set(ids)); }
+  function deselectAllForBatch() { setSelectedForBatch(new Set()); }
 
   // Styles
   function tabStyle(t: TabName) { return { padding: "10px 24px", border: "none", borderRadius: "8px 8px 0 0", cursor: "pointer" as const, fontWeight: 600 as const, fontSize: "15px", background: tab === t ? "#fff" : "transparent", color: tab === t ? PRIMARY : "#999", borderBottom: tab === t ? "2px solid " + PRIMARY : "2px solid transparent" }; }
@@ -776,11 +513,11 @@ export default function Home() {
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Noto Sans SC','Microsoft YaHei',sans-serif", color: "#333" }}>
       {previewUrl && <div onClick={() => setPreviewUrl(null)} style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}><button onClick={() => setPreviewUrl(null)} style={{ position: "absolute", top: 20, right: 20, width: 44, height: 44, borderRadius: "50%", background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>✕</button><img src={previewUrl} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", objectFit: "contain", borderRadius: 8 }} /></div>}
-      {parentNotice !== null && <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 420, width: "90%" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>📱 家长通知</h3><button onClick={() => setParentNotice(null)} style={{ background: "transparent", border: "none", fontSize: 20, cursor: "pointer", color: "#999" }}>✕</button></div><pre style={{ whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.8, color: "#444", background: "#f0faf0", padding: 14, borderRadius: 8, marginBottom: 14, border: "1px solid #d0e8d0" }}>{parentNotice}</pre><div style={{ display: "flex", gap: 8 }}><button onClick={() => { navigator.clipboard.writeText(parentNotice); setCopyMsg("已复制通知"); setTimeout(() => setCopyMsg(""), 1500); }} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: GREEN, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{copyMsg === "已复制通知" ? "✅ 已复制" : "📋 复制"}</button><button onClick={() => setParentNotice(null)} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #ddd", background: "#fff", color: "#666", fontSize: 14, cursor: "pointer" }}>关闭</button></div></div></div>}
-      {copyMsg && !parentNotice && <div style={{ position: "fixed", top: 80, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: GREEN, color: "#fff", padding: "8px 24px", borderRadius: 8, fontSize: 14, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>✅ {copyMsg}</div>}
+      {copyMsg && <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: GREEN, color: "#fff", padding: "8px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999 }}>{copyMsg}</div>}
+      {parentNotice && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 420, width: "90%" }}><h3 style={{ marginBottom: 12 }}>📱 家长通知</h3><pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, background: "#f9f9f9", padding: 12, borderRadius: 8 }}>{parentNotice}</pre><div style={{ display: "flex", gap: 8, marginTop: 12 }}><button onClick={() => { clipCopy(parentNotice, "已复制通知"); }} style={{ flex: 1, padding: 8, borderRadius: 6, border: "none", background: GREEN, color: "#fff", cursor: "pointer", fontWeight: 600 }}>复制</button><button onClick={() => setParentNotice(null)} style={{ flex: 1, padding: 8, borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>关闭</button></div></div></div>}
 
-      <div style={{ background: "linear-gradient(135deg," + PRIMARY + ",#1a2744)", padding: isMobile ? "10px 16px" : "14px 32px", color: "#fff", display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "center", gap: isMobile ? 8 : 0 }}>
-        <div><h1 style={{ margin: 0, fontSize: isMobile ? "16px" : "20px", fontWeight: 700, letterSpacing: 2 }}>语文作业智能批改</h1>{!isMobile && <p style={{ margin: "2px 0 0", fontSize: "12px", opacity: 0.7 }}>上传照片 → AI自动批注 → 微调导出</p>}</div>
+      <div style={{ background: `linear-gradient(135deg, ${PRIMARY}, #1a2a4a)`, padding: isMobile ? "12px 16px" : "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <div><h1 style={{ fontSize: isMobile ? 16 : 20, fontWeight: 700, color: "#fff", margin: 0 }}>语文作业智能批改</h1><p style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", margin: 0 }}>上传照片 → AI自动批注 → 微调导出</p></div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <button onClick={runBatchGrading} disabled={loading} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.5 : 1 }}>🚀 批改全部</button>
           <button onClick={exportAllPNGs} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>📥 导出图片</button>
@@ -796,26 +533,47 @@ export default function Home() {
 
         {tab === "upload" && (
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 16 : 24 }}>
-            {/* ====== LEFT: Student list + photo upload ====== */}
+            {/* LEFT: class + student list */}
             <div style={{ width: isMobile ? "100%" : "55%", flexShrink: 0 }}>
+              {/* Class tabs */}
+              <div style={{ display: "flex", gap: 4, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+                {classNames.map(cn => (
+                  <button key={cn} onClick={() => { setCurrentClass(cn); setActiveStudentId(students.find(s => !s.archived && s.className === cn)?.id || ""); }} style={{ padding: "5px 14px", borderRadius: 6, border: "none", cursor: "pointer", background: currentClass === cn ? PRIMARY : "#eee", color: currentClass === cn ? "#fff" : "#666", fontWeight: 600, fontSize: 12 }}>{cn}</button>
+                ))}
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  <input value={newClassName} onChange={e => setNewClassName(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && newClassName.trim()) { if (!classNames.includes(newClassName.trim())) setClassNames(prev => [...prev, newClassName.trim()]); setCurrentClass(newClassName.trim()); setNewClassName(""); } }} placeholder="新班级" style={{ width: 70, padding: "4px 8px", borderRadius: 4, border: "1px solid #ddd", fontSize: 11, outline: "none" }} />
+                  <button onClick={() => { if (newClassName.trim() && !classNames.includes(newClassName.trim())) { setClassNames(prev => [...prev, newClassName.trim()]); setCurrentClass(newClassName.trim()); setNewClassName(""); } }} style={{ padding: "4px 8px", borderRadius: 4, border: "none", background: "#eee", fontSize: 11, cursor: "pointer" }}>+</button>
+                </div>
+              </div>
+
               <div style={{ display: "flex", gap: 6, marginBottom: 12 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
+
+              {/* Batch select controls */}
+              {classStudents.length > 0 && <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+                <button onClick={selectAllForBatch} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid #ddd", background: "#fff", fontSize: 11, cursor: "pointer" }}>全选</button>
+                <button onClick={deselectAllForBatch} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid #ddd", background: "#fff", fontSize: 11, cursor: "pointer" }}>取消全选</button>
+                {selectedForBatch.size > 0 && <span style={{ fontSize: 11, color: PRIMARY, fontWeight: 600 }}>已选 {selectedForBatch.size} 人</span>}
+              </div>}
+
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                {students.filter(s => !s.archived).length === 0 && <p style={{ fontSize: 13, color: "#bbb", textAlign: "center", padding: "20px 0" }}>请先添加学生</p>}
-                {students.filter(s => !s.archived).map(s => (<div key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#fff", color: activeStudentId === s.id ? "#fff" : "#333", border: activeStudentId === s.id ? "none" : "1px solid #eee" }}>
+                {classStudents.length === 0 && <p style={{ fontSize: 13, color: "#bbb", textAlign: "center", padding: "20px 0" }}>请先添加学生</p>}
+                {classStudents.map(s => (<div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input type="checkbox" checked={selectedForBatch.has(s.id)} onChange={() => toggleBatchSelect(s.id)} style={{ cursor: "pointer", accentColor: PRIMARY }} />
+                  <div onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} style={{ flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#fff", color: activeStudentId === s.id ? "#fff" : "#333", border: activeStudentId === s.id ? "none" : "1px solid #eee" }}>
                   <div><span style={{ fontWeight: 600, fontSize: 14 }}>{s.name}</span><span style={{ marginLeft: 8, fontSize: 11, padding: "2px 6px", borderRadius: 4, background: s.status === "done" ? GREEN : s.status === "grading" ? "#f39c12" : s.status === "error" ? RED : "#eee", color: s.status === "idle" ? "#999" : "#fff" }}>{s.status === "done" ? "已批改" : s.status === "grading" ? "批改中" : s.status === "error" ? "出错" : (s.images.length || s.imageUrls.length) + "张"}</span></div>
                   <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                     {s.status === "error" && <button onClick={e => { e.stopPropagation(); retryGrading(s.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "#ffd" : ORANGE, fontSize: 12, fontWeight: 600 }}>🔄</button>}
                     {s.status === "done" && <button onClick={e => { e.stopPropagation(); archiveStudent(s.id); }} title="归档" style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "rgba(255,255,255,0.7)" : "#aaa", fontSize: 13 }}>📦</button>}
                     <button onClick={e => { e.stopPropagation(); removeStudent(s.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "rgba(255,255,255,0.6)" : "#ccc", fontSize: 16 }}>✕</button>
                   </div>
-                </div>))}
+                </div></div>))}
               </div>
-              {/* Photo upload for selected student */}
-              {activeStudent && <>
+              {/* Photo upload */}
+              {activeStudent && activeStudent.className === currentClass && <>
                 <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: "#555" }}>{activeStudent.name} 的作业照片</h4>
                 {activeStudent.status === "error" && <div style={{ background: "#fef2f2", border: "1px solid #f0c0c0", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-                  <span style={{ color: RED }}>❌ {activeStudent.errorMsg || "出错"}</span>
-                  <button onClick={() => retryGrading(activeStudent.id)} disabled={loading} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff", fontSize: 12, cursor: "pointer" }}>🔄 重试</button>
+                  <span style={{ color: RED, flex: 1, wordBreak: "break-all" }}>❌ {activeStudent.errorMsg || "出错"}</span>
+                  <button onClick={() => retryGrading(activeStudent.id)} disabled={loading} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", marginLeft: 8 }}>🔄 重试</button>
                 </div>}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: 12, borderRadius: 10, border: dragOver ? "2px dashed " + PRIMARY : "1px dashed #ccc", background: dragOver ? "#e8ecf4" : "#fafafa", marginBottom: 12 }} onDrop={onDropImages} onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }} onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}>
                   {activeStudent.imageUrls.map((url, i) => (<div key={i} onClick={() => setPreviewUrl(url)} style={{ width: 80, height: 105, borderRadius: 6, overflow: "hidden", border: "1px solid #ddd", position: "relative", cursor: "pointer", flexShrink: 0 }}><img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={e => { e.stopPropagation(); removeImage(activeStudent.id, i); }} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button><div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 9, textAlign: "center", padding: 2 }}>{"第" + (i + 1) + "页"}</div></div>))}
@@ -824,41 +582,29 @@ export default function Home() {
               </>}
             </div>
 
-            {/* ====== RIGHT: Global grading settings ====== */}
+            {/* RIGHT: Settings */}
             <div style={{ flex: 1, padding: 20, borderRadius: 12, border: "1px solid #e0e0e0", background: "#fff", alignSelf: "flex-start" }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: PRIMARY, margin: "0 0 14px" }}>⚙️ 批改设置</h3>
               <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 4 }}>年级</label><select value={grade} onChange={e => setGrade(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 13 }}>{["一年级上","一年级下","二年级上","二年级下","三年级上","三年级下","四年级上","四年级下","五年级上","五年级下","六年级上","六年级下"].map(g => <option key={g}>{g}</option>)}</select></div>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 4 }}>主题</label><select value={topic} onChange={e => setTopic(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 13 }}>{["看图写话","写人","记事","写景","状物","想象作文","日记","书信","读后感","中华传统节日","自由命题","童话","其他"].map(t => <option key={t}>{t}</option>)}</select></div>
               </div>
-
               <div style={{ marginBottom: 12 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 4 }}>📝 特殊要求（选填）</label>
                 <textarea value={specialReq} onChange={e => setSpecialReq(e.target.value)} placeholder="例如：这次写童话，注意想象力和拟人手法…" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 12, minHeight: 40, resize: "vertical", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
               </div>
-
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 6 }}>📄 范文模板（选填，可拖拽多张）</label>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: 8, borderRadius: 8, border: modelDragOver ? "2px dashed " + PRIMARY : "1px dashed #ccc", background: modelDragOver ? "#e8ecf4" : "#fafafa", minHeight: 50 }}
-                  onDrop={onDropModelImages} onDragOver={e => { e.preventDefault(); e.stopPropagation(); setModelDragOver(true); }} onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setModelDragOver(false); }}>
-                  {modelImageUrls.map((url, i) => (
-                    <div key={i} onClick={() => setPreviewUrl(url)} style={{ width: 50, height: 65, borderRadius: 4, overflow: "hidden", border: "1px solid #ddd", position: "relative", cursor: "pointer", flexShrink: 0 }}>
-                      <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      <button onClick={e => { e.stopPropagation(); removeModelImage(i); }} style={{ position: "absolute", top: 1, right: 1, width: 14, height: 14, borderRadius: "50%", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", cursor: "pointer", fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-                    </div>
-                  ))}
-                  <div onClick={() => modelFileRef.current?.click()} style={{ width: 50, height: 65, borderRadius: 4, border: "2px dashed #ccc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fff", color: "#bbb", fontSize: 9, flexShrink: 0 }}>
-                    <span style={{ fontSize: 18 }}>+</span><span>范文</span>
-                  </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: 8, borderRadius: 8, border: modelDragOver ? "2px dashed " + PRIMARY : "1px dashed #ccc", background: modelDragOver ? "#e8ecf4" : "#fafafa", minHeight: 50 }} onDrop={onDropModelImages} onDragOver={e => { e.preventDefault(); e.stopPropagation(); setModelDragOver(true); }} onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setModelDragOver(false); }}>
+                  {modelImageUrls.map((url, i) => (<div key={i} onClick={() => setPreviewUrl(url)} style={{ width: 50, height: 65, borderRadius: 4, overflow: "hidden", border: "1px solid #ddd", position: "relative", cursor: "pointer", flexShrink: 0 }}><img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={e => { e.stopPropagation(); removeModelImage(i); }} style={{ position: "absolute", top: 1, right: 1, width: 14, height: 14, borderRadius: "50%", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", cursor: "pointer", fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button></div>))}
+                  <div onClick={() => modelFileRef.current?.click()} style={{ width: 50, height: 65, borderRadius: 4, border: "2px dashed #ccc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fff", color: "#bbb", fontSize: 9, flexShrink: 0 }}><span style={{ fontSize: 18 }}>+</span><span>范文</span></div>
                   <input ref={modelFileRef} type="file" accept="image/*" multiple onChange={onPickModelImages} style={{ display: "none" }} />
                 </div>
                 {modelImageUrls.length > 0 && <p style={{ fontSize: 11, color: "#999", marginTop: 4 }}>已添加 {modelImageUrls.length} 张范文，批改时自动对比</p>}
                 {modelText && <p style={{ fontSize: 11, color: GREEN, marginTop: 2 }}>✅ 范文已分析（复用中）</p>}
               </div>
-
-              {/* Action buttons */}
               {activeStudent && <button disabled={(activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading} onClick={runGrading} style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", fontSize: 14, fontWeight: 700, color: "#fff", cursor: (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading ? "not-allowed" : "pointer", background: (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading ? "#ccc" : PRIMARY, marginBottom: 8 }}>{loading ? stepText : "批改 " + activeStudent.name + "（" + (activeStudent.images.length || activeStudent.imageUrls.length) + " 张）"}</button>}
-              <button disabled={loading} onClick={runBatchGrading} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid " + PRIMARY, fontSize: 13, fontWeight: 600, color: PRIMARY, cursor: loading ? "not-allowed" : "pointer", background: "#fff" }}>🚀 一键批改全部待批改学生</button>
+              <button disabled={loading} onClick={runBatchGrading} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid " + PRIMARY, fontSize: 13, fontWeight: 600, color: PRIMARY, cursor: loading ? "not-allowed" : "pointer", background: "#fff" }}>{selectedForBatch.size > 0 ? `🚀 批改已选 ${selectedForBatch.size} 人` : "🚀 一键批改全部待批改学生"}</button>
               {loading && <div style={{ marginTop: 10 }}><div style={{ width: "100%", height: 5, borderRadius: 3, background: "#eee" }}><div style={{ width: progress + "%", height: "100%", borderRadius: 3, background: PRIMARY, transition: "width 0.5s" }} /></div><p style={{ fontSize: 11, color: "#888", textAlign: "center", marginTop: 4 }}>{progress}% · {stepText}</p></div>}
             </div>
           </div>
@@ -900,15 +646,10 @@ export default function Home() {
                 {padRight > 0 && <button onClick={() => setPad(3, v => Math.max(0, v - 120))} style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid #f0c0c0", background: "#fef2f2", cursor: "pointer", fontSize: 11, color: RED }}>−</button>}
                 {(padTop > 0 || padBot > 0 || padLeft > 0 || padRight > 0) && <button onClick={resetPad} style={{ padding: "2px 10px", borderRadius: 4, border: "1px solid #f0c0c0", background: "#fef2f2", cursor: "pointer", fontSize: 11, color: RED }}>重置</button>}
               </div>
-
               <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 320px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #eee" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
                 {activeStudent.imageUrls[pageIndex] && <div style={{ position: "relative", background: "#fff", display: "inline-block", minWidth: "100%" }}>
                   {padTop > 0 && <div style={{ height: padTop, background: "#fff" }} />}
-                  <div style={{ display: "flex" }}>
-                    {padLeft > 0 && <div style={{ width: padLeft, flexShrink: 0, background: "#fff" }} />}
-                    <img ref={imgRef} src={activeStudent.imageUrls[pageIndex]} alt="" style={{ maxWidth: 700, width: "auto", display: "block" }} onLoad={syncCanvas} onDragStart={e => e.preventDefault()} />
-                    {padRight > 0 && <div style={{ width: padRight, flexShrink: 0, background: "#fff" }} />}
-                  </div>
+                  <div style={{ display: "flex" }}>{padLeft > 0 && <div style={{ width: padLeft, flexShrink: 0, background: "#fff" }} />}<img ref={imgRef} src={activeStudent.imageUrls[pageIndex]} alt="" style={{ maxWidth: 700, width: "auto", display: "block" }} onLoad={syncCanvas} onDragStart={e => e.preventDefault()} />{padRight > 0 && <div style={{ width: padRight, flexShrink: 0, background: "#fff" }} />}</div>
                   {padBot > 0 && <div style={{ height: padBot, background: "#fff" }} />}
                   <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, cursor: movingIdx >= 0 ? "grabbing" : pendingStamp ? "copy" : tool === "hand" ? (handDragging ? "grabbing" : "grab") : tool === "text" ? "text" : tool === "eraser" ? "pointer" : tool === "penEraser" ? "crosshair" : "crosshair" }} onMouseDown={mDown} onMouseMove={mMove} onMouseUp={mUp} onDoubleClick={mDblClick} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()} onMouseLeave={() => { if (isDrawing) { setIsDrawing(false); redraw(); } if (handDragging) setHandDragging(false); setHoverIdx(-1); }} />
                   {movingIdx >= 0 && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(44,62,107,0.9)", color: "#fff", padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, zIndex: 30, pointerEvents: "none" }}>移动中 · 单击放置 · Esc取消</div>}
@@ -919,37 +660,55 @@ export default function Home() {
               <p style={{ fontSize: 11, color: "#bbb", textAlign: "center", margin: "4px 0 0" }}>💡 快捷键 1-7 切换工具 · 双击文字编辑 · 靠近批注显示✥移动按钮 · Esc取消</p>
             </div>
 
+            {/* Detail panel - RIGHT */}
             <div style={{ flex: isMobile ? "auto" : "0 0 42%", overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 180px)" }}>
               {activeStudent.essayDetail ? <>
                 <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}><button onClick={copyAllDetail} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📋 复制全部</button><button onClick={generateParentNotice} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📱 家长通知</button></div>
+
+                {/* Corrections */}
                 <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: RED }}>✏️ 逐段批注</h3>{(activeStudent.essayDetail.corrections || []).map((c: any, i: number) => (<div key={i} style={{ background: "#fff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #eee" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}><div style={{ flex: 1 }}><span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: c.type === "praise" ? GREEN : RED, color: "#fff" }}>{c.paragraph}{c.type === "praise" ? " 👍" : ""}</span><p style={{ fontSize: 13, margin: "4px 0 0", color: "#444" }}>{c.text}</p></div><button onClick={() => copyOneCorrection(c)} style={cpBtnS} title="复制批注">📋</button></div>{c.suggested && c.type !== "praise" && <div style={{ marginTop: 4, padding: "4px 10px", borderRadius: 5, background: "#edf9f1", borderLeft: "3px solid " + GREEN, fontSize: 13, color: GREEN, display: "flex", justifyContent: "space-between", alignItems: "center" }}>→ {c.suggested}<button onClick={() => copyOneSuggested(c)} style={{ ...cpBtnS, color: GREEN }} title="复制建议">📋</button></div>}</div>))}</div>
+
+                {/* Model suggestions - NEW */}
+                {activeStudent.essayDetail.model_suggestions?.length > 0 && <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: "#2980b9" }}>📄 范文对比修改建议</h3>{activeStudent.essayDetail.model_suggestions.map((s: any, i: number) => (<div key={i} style={{ background: "#f0f8ff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #b8d8f0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "#2980b9", color: "#fff" }}>{s.paragraph}</span>
+                    <button onClick={() => copyModelSuggestion(s)} style={cpBtnS} title="复制">📋</button>
+                  </div>
+                  <p style={{ fontSize: 12, margin: "6px 0 2px", color: "#888" }}>学生原句：<span style={{ color: "#555" }}>{s.student_text}</span></p>
+                  <p style={{ fontSize: 12, margin: "2px 0", color: "#888" }}>范文参考：<span style={{ color: "#2980b9", fontWeight: 600 }}>{s.model_text}</span></p>
+                  <p style={{ fontSize: 13, margin: "4px 0 0", color: "#444", lineHeight: 1.7 }}>💡 {s.suggestion}</p>
+                </div>))}</div>}
+
+                {/* Good phrases */}
                 {activeStudent.essayDetail.good_phrases?.length > 0 && <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: RED }}>⭕ 好词好句</h3><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{activeStudent.essayDetail.good_phrases.map((g: any, i: number) => (<span key={i} style={{ padding: "4px 12px", borderRadius: 20, background: g.type === "word" ? "#fef2f2" : "#fff8ed", border: "1px solid " + (g.type === "word" ? "#f0c0c0" : "#f0e0c0"), fontSize: 13, color: "#555" }}>{g.type === "word" ? "📍" : "〰️"} {g.phrase} <span style={{ fontSize: 11, color: "#999" }}>{g.paragraph}</span></span>))}</div></div>}
+
+                {/* Highlights */}
                 <div style={{ marginBottom: 16 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}><h3 style={{ fontSize: 16, fontWeight: 700, color: GREEN, margin: 0 }}>🌟 三大亮点</h3><button onClick={copyAllHighlights} style={cpBtnS}>📋</button></div>{(activeStudent.essayDetail.highlights || []).map((h: any, i: number) => (<div key={i} style={{ background: "#edf9f1", borderRadius: 8, padding: 14, marginBottom: 8, borderLeft: "3px solid " + GREEN }}><p style={{ fontWeight: 700, fontSize: 14, color: GREEN, marginBottom: 4 }}>{(i + 1) + ". " + h.title}</p><p style={{ fontSize: 13, lineHeight: 1.8, margin: 0, color: "#444" }}>{h.description}</p></div>))}</div>
-                {activeStudent.essayDetail.dimensions && <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>📊 四维评价</h3>{Object.entries(activeStudent.essayDetail.dimensions as Record<string, string>).map(([key, val]) => { const lb: Record<string, string> = { content: "内容", structure: "结构", language: "语言", writing: "书写" }; return (<div key={key} style={{ background: "#fff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #eee" }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 4, color: PRIMARY }}>{lb[key] || key}</p><p style={{ fontSize: 13, lineHeight: 1.7, margin: 0, color: "#555" }}>{val}</p></div>); })}</div>}
+
+                {/* Special req feedback */}
                 {activeStudent.essayDetail.special_req_feedback && <div style={{ background: "#fff0f6", borderRadius: 8, padding: 16, border: "1px solid #f0c0d8", marginBottom: 16 }}><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: "#c0392b" }}>📝 本次特殊要求反馈</h3><p style={{ fontSize: 13, lineHeight: 1.8, margin: 0, color: "#555" }}>{activeStudent.essayDetail.special_req_feedback}</p></div>}
-                {activeStudent.essayDetail.model_comparison && <div style={{ background: "#f0f8ff", borderRadius: 8, padding: 16, border: "1px solid #b8d8f0", marginBottom: 16 }}><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: "#2980b9" }}>📄 范文对比分析</h3><p style={{ fontSize: 13, lineHeight: 1.8, margin: 0, color: "#555", whiteSpace: "pre-wrap" }}>{activeStudent.essayDetail.model_comparison}</p></div>}
+
+                {/* Teacher comment */}
                 {activeStudent.essayDetail.teacher_comment && <div style={{ background: "#fff8ed", borderRadius: 8, padding: 16, border: "1px solid #f0e0c0", marginBottom: 16, position: "relative" }}><button onClick={copyTeacherComment} style={{ ...cpBtnS, position: "absolute", top: 12, right: 12 }}>📋</button><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>💬 教师总评</h3><p style={{ fontSize: 14, lineHeight: 2, margin: 0, color: "#555" }}>{activeStudent.essayDetail.teacher_comment}</p></div>}
+
+                {/* Improvement tips */}
                 {activeStudent.essayDetail.improvement_tips?.length > 0 && <div style={{ background: "#f0f4ff", borderRadius: 8, padding: 16, border: "1px solid #d0d8f0", position: "relative" }}><button onClick={copyAllTips} style={{ ...cpBtnS, position: "absolute", top: 12, right: 12 }}>📋</button><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: PRIMARY }}>📝 改进方向</h3>{activeStudent.essayDetail.improvement_tips.map((tip: string, i: number) => (<p key={i} style={{ fontSize: 13, lineHeight: 1.8, margin: "0 0 6px", color: "#444" }}>{tip}</p>))}</div>}
               </> : <p style={{ color: "#bbb", textAlign: "center", paddingTop: 40 }}>请先批改后查看</p>}
             </div>
           </div>}
         </div>}
 
-        {/* ========== ARCHIVE TAB ========== */}
+        {/* Archive */}
         {tab === "archive" && <div>
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#555" }}>📦 储存箱 <span style={{ fontSize: 13, fontWeight: 400, color: "#999" }}>（已归档的批改记录）</span></h3>
           {students.filter(s => s.archived).length === 0 ? (
-            <div style={{ textAlign: "center", padding: "60px 0", color: "#bbb" }}>
-              <p style={{ fontSize: 36 }}>📦</p>
-              <p>储存箱是空的</p>
-              <p style={{ fontSize: 13 }}>批改完成的学生可以在列表里点 📦 归档到这里</p>
-            </div>
+            <div style={{ textAlign: "center", padding: "60px 0", color: "#bbb" }}><p style={{ fontSize: 36 }}>📦</p><p>储存箱是空的</p><p style={{ fontSize: 13 }}>批改完成的学生可以在列表里点 📦 归档到这里</p></div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
               {students.filter(s => s.archived).map(s => (
                 <div key={s.id} style={{ background: "#fff", borderRadius: 12, border: "1px solid #eee", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontWeight: 700, fontSize: 15 }}>{s.name}</span>
+                    <span style={{ fontWeight: 700, fontSize: 15 }}>{s.name} <span style={{ fontSize: 11, color: "#999", fontWeight: 400 }}>{s.className}</span></span>
                     <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: s.status === "done" ? GREEN : "#eee", color: s.status === "done" ? "#fff" : "#999" }}>{s.status === "done" ? "已批改" : s.status}</span>
                   </div>
                   {s.essayDetail?.teacher_comment && <p style={{ fontSize: 12, color: "#888", lineHeight: 1.6, margin: 0 }}>{s.essayDetail.teacher_comment.slice(0, 80)}...</p>}

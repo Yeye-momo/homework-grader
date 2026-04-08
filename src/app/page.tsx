@@ -101,6 +101,11 @@ export default function Home() {
   const [newClassName, setNewClassName] = useState("");
   // Batch select
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
+  // API settings (user-customizable)
+  const [showSettings, setShowSettings] = useState(false);
+  const [customApiKey, setCustomApiKey] = useState("");
+  const [customEpPro, setCustomEpPro] = useState("");
+  const [customEpFast, setCustomEpFast] = useState("");
 
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -149,6 +154,11 @@ export default function Home() {
         if (d.modelText) setModelText(d.modelText);
         if (d.classNames?.length) setClassNames(d.classNames);
         if (d.currentClass) setCurrentClass(d.currentClass);
+        // Load API settings
+        const apiSettings = JSON.parse(localStorage.getItem("hw_api_settings") || "{}");
+        if (apiSettings.apiKey) setCustomApiKey(apiSettings.apiKey);
+        if (apiSettings.epPro) setCustomEpPro(apiSettings.epPro);
+        if (apiSettings.epFast) setCustomEpFast(apiSettings.epFast);
         let pending = 0;
         loaded.forEach((s: any) => {
           const imgCount = s._savedImgCount || 0;
@@ -446,13 +456,17 @@ export default function Home() {
           const mfd = new FormData();
           const blob = await recompressDataUrl(modelImageUrls[bi]);
           mfd.append("images", new File([blob], "model.jpg", { type: "image/jpeg" }));
-          const mr = await fetch("/api/ocr", { method: "POST", body: mfd });
+          const ocrHeaders: Record<string, string> = {};
+          if (customApiKey) ocrHeaders["x-ark-api-key"] = customApiKey;
+          if (customEpPro) ocrHeaders["x-ark-ep-pro"] = customEpPro;
+          if (customEpFast) ocrHeaders["x-ark-ep-fast"] = customEpFast;
+          const mr = await fetch("/api/ocr", { method: "POST", body: mfd, headers: ocrHeaders });
           if (mr.ok) { const { ocrText: partOcr } = await mr.json(); if (partOcr) ocrParts.push(partOcr); }
         }
         const modelOcr = ocrParts.join("\n\n");
         if (modelOcr.trim()) {
           onP?.(15, "范文识别完成，正在分析范文...");
-          const mr2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText: modelOcr, gradeInfo: grade + " " + topic, isModelEssay: true }) });
+          const mr2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText: modelOcr, gradeInfo: grade + " " + topic, isModelEssay: true, apiKey: customApiKey || undefined, epPro: customEpPro || undefined, epFast: customEpFast || undefined }) });
           if (mr2.ok) { const analysis = await mr2.json(); modelAnalysis = typeof analysis === "string" ? analysis : JSON.stringify(analysis, null, 2); setModelText(modelAnalysis); }
         }
       }
@@ -465,14 +479,18 @@ export default function Home() {
       for (let bi = 0; bi < imgSources.length; bi++) {
         if (imgSources.length > 1) onP?.(25 + Math.round((bi / imgSources.length) * 25), `正在识别第${bi + 1}/${imgSources.length}页...`);
         const fd = new FormData(); fd.append("images", new File([imgSources[bi].blob], imgSources[bi].name, { type: imgSources[bi].blob.type || "image/jpeg" }));
-        const r1 = await fetch("/api/ocr", { method: "POST", body: fd });
+        const stuOcrHeaders: Record<string, string> = {};
+        if (customApiKey) stuOcrHeaders["x-ark-api-key"] = customApiKey;
+        if (customEpPro) stuOcrHeaders["x-ark-ep-pro"] = customEpPro;
+        if (customEpFast) stuOcrHeaders["x-ark-ep-fast"] = customEpFast;
+        const r1 = await fetch("/api/ocr", { method: "POST", body: fd, headers: stuOcrHeaders });
         if (!r1.ok) { const t = await r1.text(); throw new Error("OCR失败: " + (t || r1.statusText)); }
         const { ocrText: partOcr } = await r1.json(); if (partOcr) stuOcrParts.push(partOcr);
       }
       const ocrText = stuOcrParts.join("\n\n"); updateStudent(sid, { ocrText });
       // Step 3: AI grading
       onP?.(55, "文字识别完成，正在AI精批...");
-      const r2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText, gradeInfo: grade + " " + topic, modelAnalysis: modelAnalysis || undefined, specialRequirement: specialReq || undefined }) });
+      const r2 = await fetch("/api/essay-detail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocrText, gradeInfo: grade + " " + topic, modelAnalysis: modelAnalysis || undefined, specialRequirement: specialReq || undefined, apiKey: customApiKey || undefined, epPro: customEpPro || undefined, epFast: customEpFast || undefined }) });
       if (!r2.ok) { const t = await r2.text(); throw new Error("精批失败: " + (t || r2.statusText)); }
       const essayDetail = await r2.json(); updateStudent(sid, { essayDetail, status: "done" }); onP?.(100, "批改完成！");
     } catch (err: any) { updateStudent(sid, { status: "error", errorMsg: err.message || "未知错误" }); throw err; }
@@ -525,6 +543,28 @@ export default function Home() {
       {copyMsg && <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: GREEN, color: "#fff", padding: "8px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999 }}>{copyMsg}</div>}
       {parentNotice && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 420, width: "90%" }}><h3 style={{ marginBottom: 12 }}>📱 家长通知</h3><pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, background: "#f9f9f9", padding: 12, borderRadius: 8 }}>{parentNotice}</pre><div style={{ display: "flex", gap: 8, marginTop: 12 }}><button onClick={() => { clipCopy(parentNotice, "已复制通知"); }} style={{ flex: 1, padding: 8, borderRadius: 6, border: "none", background: GREEN, color: "#fff", cursor: "pointer", fontWeight: 600 }}>复制</button><button onClick={() => setParentNotice(null)} style={{ flex: 1, padding: 8, borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>关闭</button></div></div></div>}
 
+      {showSettings && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 480, width: "90%" }}>
+        <h3 style={{ marginBottom: 16, fontSize: 16, fontWeight: 700 }}>⚙️ API 设置</h3>
+        <p style={{ fontSize: 12, color: "#888", marginBottom: 12 }}>留空则使用系统默认配置。如需使用自己的豆包API，请填写以下信息：</p>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 4 }}>API Key</label>
+          <input value={customApiKey} onChange={e => setCustomApiKey(e.target.value)} placeholder="留空使用默认" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 13, boxSizing: "border-box" }} />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 4 }}>Pro 接入点 ID（精批模型）</label>
+          <input value={customEpPro} onChange={e => setCustomEpPro(e.target.value)} placeholder="如 ep-2024xxxxxxxxxx-xxxxx" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 13, boxSizing: "border-box" }} />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 4 }}>Flash 接入点 ID（OCR模型）</label>
+          <input value={customEpFast} onChange={e => setCustomEpFast(e.target.value)} placeholder="如 ep-2024xxxxxxxxxx-xxxxx" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 13, boxSizing: "border-box" }} />
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => { localStorage.setItem("hw_api_settings", JSON.stringify({ apiKey: customApiKey, epPro: customEpPro, epFast: customEpFast })); setShowSettings(false); setCopyMsg("API设置已保存"); setTimeout(() => setCopyMsg(""), 1500); }} style={{ flex: 1, padding: 10, borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>保存</button>
+          <button onClick={() => setShowSettings(false)} style={{ flex: 1, padding: 10, borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer", fontSize: 13 }}>取消</button>
+        </div>
+        <p style={{ fontSize: 11, color: "#bbb", marginTop: 12, lineHeight: 1.6 }}>提示：API Key 仅保存在你的浏览器本地，不会上传到服务器。需要在火山引擎Ark平台开通豆包模型。</p>
+      </div></div>}
+
       <div style={{ background: `linear-gradient(135deg, ${PRIMARY}, #1a2a4a)`, padding: isMobile ? "12px 16px" : "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div><h1 style={{ fontSize: isMobile ? 16 : 20, fontWeight: 700, color: "#fff", margin: 0 }}>语文作业智能批改</h1><p style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", margin: 0 }}>上传照片 → AI自动批注 → 微调导出</p></div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -532,6 +572,7 @@ export default function Home() {
           <button onClick={exportAllPNGs} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>📥 导出图片</button>
           <button onClick={exportData} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>💾 备份</button>
           <button onClick={() => importFileRef.current?.click()} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>📂 恢复</button>
+          <button onClick={() => setShowSettings(true)} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>⚙️</button>
           <input ref={importFileRef} type="file" accept=".json" onChange={importData} style={{ display: "none" }} />
         </div>
       </div>
@@ -555,7 +596,7 @@ export default function Home() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 10px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
 
               {/* Batch select controls */}
               {classStudents.length > 0 && <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
@@ -713,22 +754,32 @@ export default function Home() {
           {students.filter(s => s.archived).length === 0 ? (
             <div style={{ textAlign: "center", padding: "60px 0", color: "#bbb" }}><p style={{ fontSize: 36 }}>📦</p><p>储存箱是空的</p><p style={{ fontSize: 13 }}>批改完成的学生可以在列表里点 📦 归档到这里</p></div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-              {students.filter(s => s.archived).map(s => (
-                <div key={s.id} style={{ background: "#fff", borderRadius: 12, border: "1px solid #eee", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontWeight: 700, fontSize: 15 }}>{s.name} <span style={{ fontSize: 11, color: "#999", fontWeight: 400 }}>{s.className}</span></span>
-                    <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: s.status === "done" ? GREEN : "#eee", color: s.status === "done" ? "#fff" : "#999" }}>{s.status === "done" ? "已批改" : s.status}</span>
+            <div>
+              {/* Group archived students by class */}
+              {Array.from(new Set(students.filter(s => s.archived).map(s => s.className || "默认班"))).map(cn => {
+                const classArchived = students.filter(s => s.archived && (s.className || "默认班") === cn);
+                if (classArchived.length === 0) return null;
+                return (<div key={cn} style={{ marginBottom: 20 }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 600, color: PRIMARY, marginBottom: 10, borderBottom: "1px solid #eee", paddingBottom: 6 }}>{cn} <span style={{ fontSize: 12, fontWeight: 400, color: "#999" }}>({classArchived.length}人)</span></h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+                    {classArchived.map(s => (
+                      <div key={s.id} style={{ background: "#fff", borderRadius: 12, border: "1px solid #eee", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontWeight: 700, fontSize: 15 }}>{s.name}</span>
+                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: s.status === "done" ? GREEN : "#eee", color: s.status === "done" ? "#fff" : "#999" }}>{s.status === "done" ? "已批改" : s.status}</span>
+                        </div>
+                        {s.essayDetail?.teacher_comment && <p style={{ fontSize: 12, color: "#888", lineHeight: 1.6, margin: 0 }}>{s.essayDetail.teacher_comment.slice(0, 80)}...</p>}
+                        <div style={{ fontSize: 12, color: "#aaa" }}>{s.imageUrls.length} 张照片</div>
+                        <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                          <button onClick={() => { unarchiveStudent(s.id); setActiveStudentId(s.id); setCurrentClass(s.className || "默认班"); setTab("upload"); }} style={{ flex: 1, padding: "7px 0", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>↩ 取回</button>
+                          <button onClick={() => { unarchiveStudent(s.id); setActiveStudentId(s.id); setTab("detail"); }} style={{ flex: 1, padding: "7px 0", borderRadius: 6, border: "1px solid #ddd", background: "#fff", color: "#666", fontSize: 12, cursor: "pointer" }}>👁 查看</button>
+                          <button onClick={() => { if (confirm("确定永久删除 " + s.name + " 的所有数据？")) removeStudent(s.id); }} style={{ padding: "7px 12px", borderRadius: 6, border: "1px solid #f0c0c0", background: "#fef2f2", color: RED, fontSize: 12, cursor: "pointer" }}>🗑</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  {s.essayDetail?.teacher_comment && <p style={{ fontSize: 12, color: "#888", lineHeight: 1.6, margin: 0 }}>{s.essayDetail.teacher_comment.slice(0, 80)}...</p>}
-                  <div style={{ fontSize: 12, color: "#aaa" }}>{s.imageUrls.length} 张照片</div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-                    <button onClick={() => { unarchiveStudent(s.id); setActiveStudentId(s.id); setTab("upload"); }} style={{ flex: 1, padding: "7px 0", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>↩ 取回</button>
-                    <button onClick={() => { unarchiveStudent(s.id); setActiveStudentId(s.id); setTab("detail"); }} style={{ flex: 1, padding: "7px 0", borderRadius: 6, border: "1px solid #ddd", background: "#fff", color: "#666", fontSize: 12, cursor: "pointer" }}>👁 查看</button>
-                    <button onClick={() => { if (confirm("确定永久删除 " + s.name + " 的所有数据？")) removeStudent(s.id); }} style={{ padding: "7px 12px", borderRadius: 6, border: "1px solid #f0c0c0", background: "#fef2f2", color: RED, fontSize: 12, cursor: "pointer" }}>🗑</button>
-                  </div>
-                </div>
-              ))}
+                </div>);
+              })}
             </div>
           )}
         </div>}

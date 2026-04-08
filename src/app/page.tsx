@@ -135,11 +135,12 @@ export default function Home() {
   function resetPad() { const cur = padMap[pk] || [0,0,0,0]; shiftAnnotations(-cur[2], -cur[0]); setPadMap(prev => ({ ...prev, [pk]: [0,0,0,0] })); }
 
   // === Persistence ===
+  const [initDone, setInitDone] = useState(false);
   useEffect(() => {
     try {
       const d = JSON.parse(localStorage.getItem("hw_grader_v8") || "{}");
       if (d.students) {
-        const loaded = d.students.map((s: any) => ({ ...s, images: [], imageUrls: [], className: s.className || "默认班" }));
+        const loaded = d.students.map((s: any) => ({ ...s, images: [], imageUrls: [], className: s.className || "默认班", _savedImgCount: s.imageCount || 0 }));
         setStudents(loaded);
         setActiveStudentId(d.activeStudentId || "");
         if (d.grade) setGrade(d.grade);
@@ -148,23 +149,31 @@ export default function Home() {
         if (d.modelText) setModelText(d.modelText);
         if (d.classNames?.length) setClassNames(d.classNames);
         if (d.currentClass) setCurrentClass(d.currentClass);
+        let pending = 0;
         loaded.forEach((s: any) => {
-          const imgCount = s.imageCount || 0;
+          const imgCount = s._savedImgCount || 0;
           if (imgCount > 0) {
+            pending++;
             loadStudentImages(s.id, imgCount).then(urls => {
               const valid = urls.filter(u => u);
               if (valid.length > 0) setStudents(prev => prev.map(st => st.id === s.id ? { ...st, imageUrls: valid } : st));
+              pending--;
+              if (pending <= 0) setInitDone(true);
             });
           }
         });
+        if (pending === 0) setInitDone(true);
         const modelImgCount = d.modelImageCount || 0;
         if (modelImgCount > 0) loadModelImages(modelImgCount).then(urls => { const v = urls.filter(u => u); if (v.length > 0) setModelImageUrls(v); });
+      } else {
+        setInitDone(true);
       }
       if (d.actionMap) setActionMap(d.actionMap);
       if (d.padMap) setPadMap(d.padMap);
-    } catch {}
+    } catch { setInitDone(true); }
   }, []);
   useEffect(() => {
+    if (!initDone) return; // Don't save until images are loaded from IndexedDB
     try {
       const data = {
         students: students.map(s => ({ ...s, images: [], imageUrls: [], imageCount: s.imageUrls.length })),
@@ -350,9 +359,9 @@ export default function Home() {
   async function exportAllPNGs() { const done = students.filter(s => s.status === "done"); if (done.length === 0) { alert("没有已批改的学生"); return; } for (const stu of done) { for (let i = 0; i < stu.imageUrls.length; i++) { const blob = await exportOnePNG(stu.id, i); if (blob) { const link = document.createElement("a"); link.download = stu.name + "_" + (i + 1) + ".png"; link.href = URL.createObjectURL(blob); link.click(); await new Promise(r => setTimeout(r, 300)); } } } }
 
   // Backup / Restore
-  function exportData() { const data = { students: students.map(s => ({ ...s, images: [] })), actionMap, padMap, grade, topic, classNames, currentClass, version: "v6" }; const blob = new Blob([JSON.stringify(data)], { type: "application/json" }); const link = document.createElement("a"); link.download = "批改数据_" + new Date().toLocaleDateString("zh-CN") + ".json"; link.href = URL.createObjectURL(blob); link.click(); }
+  function exportData() { const data = { students: students.map(s => ({ ...s, images: [] })), actionMap, padMap, grade, topic, classNames, currentClass, specialReq, modelText, modelImageUrls, version: "v6" }; const blob = new Blob([JSON.stringify(data)], { type: "application/json" }); const link = document.createElement("a"); link.download = "批改数据_" + new Date().toLocaleDateString("zh-CN") + ".json"; link.href = URL.createObjectURL(blob); link.click(); }
   const importFileRef = useRef<HTMLInputElement>(null);
-  function importData(e: React.ChangeEvent<HTMLInputElement>) { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const data = JSON.parse(reader.result as string); if (data.students) { setStudents(data.students.map((s: any) => ({ ...s, images: [], className: s.className || "默认班" }))); setActiveStudentId(data.students[0]?.id || ""); } if (data.actionMap) setActionMap(data.actionMap); if (data.padMap) setPadMap(data.padMap); if (data.grade) setGrade(data.grade); if (data.topic) setTopic(data.topic); if (data.classNames) setClassNames(data.classNames); if (data.currentClass) setCurrentClass(data.currentClass); setCopyMsg("数据导入成功！"); setTimeout(() => setCopyMsg(""), 2000); } catch { alert("数据文件格式错误"); } }; reader.readAsText(file); e.target.value = ""; }
+  function importData(e: React.ChangeEvent<HTMLInputElement>) { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = async () => { try { const data = JSON.parse(reader.result as string); if (data.students) { const restored = data.students.map((s: any) => ({ ...s, images: [], className: s.className || "默认班", imageUrls: s.imageUrls || [] })); setStudents(restored); setActiveStudentId(data.students[0]?.id || ""); // Save images to IndexedDB so they persist after refresh for (const s of restored) { for (let i = 0; i < s.imageUrls.length; i++) { if (s.imageUrls[i]) await saveOneImage(s.id, i, s.imageUrls[i]); } } } if (data.actionMap) setActionMap(data.actionMap); if (data.padMap) setPadMap(data.padMap); if (data.grade) setGrade(data.grade); if (data.topic) setTopic(data.topic); if (data.classNames) setClassNames(data.classNames); if (data.currentClass) setCurrentClass(data.currentClass); if (data.specialReq) setSpecialReq(data.specialReq); if (data.modelText) setModelText(data.modelText); if (data.modelImageUrls?.length) { setModelImageUrls(data.modelImageUrls); for (let i = 0; i < data.modelImageUrls.length; i++) await saveModelImage(i, data.modelImageUrls[i]); } setCopyMsg("数据导入成功！"); setTimeout(() => setCopyMsg(""), 2000); } catch { alert("数据文件格式错误"); } }; reader.readAsText(file); e.target.value = ""; }
 
   useEffect(() => { function onKey(e: KeyboardEvent) {
     const tag = (e.target as HTMLElement)?.tagName;
@@ -546,7 +555,7 @@ export default function Home() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 10px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
 
               {/* Batch select controls */}
               {classStudents.length > 0 && <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>

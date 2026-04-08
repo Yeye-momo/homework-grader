@@ -53,6 +53,11 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [copyMsg, setCopyMsg] = useState("");
   const [batchStatus, setBatchStatus] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [customApiKey, setCustomApiKey] = useState("");
+  const [customEpPro, setCustomEpPro] = useState("");
+  const [customEpFast, setCustomEpFast] = useState("");
 
   const [tool, setTool] = useState<Tool>("select");
   const [strokeColor, setStrokeColor] = useState(RED);
@@ -447,6 +452,16 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // Load saved API settings
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("hw_api_settings") || "{}");
+      if (saved.apiKey) setCustomApiKey(saved.apiKey);
+      if (saved.epPro) setCustomEpPro(saved.epPro);
+      if (saved.epFast) setCustomEpFast(saved.epFast);
+    } catch {}
+  }, []);
+
   function addStudent() {
     if (!newName.trim()) { alert("请输入学生姓名"); return; }
     const s: Student = { id: uid(), name: newName.trim(), images: [], imageUrls: [], ocrText: "", essayDetail: null, report: "", status: "idle" };
@@ -585,6 +600,131 @@ export default function Home() {
         </div>
       )}
 
+      {/* ===== Settings Modal ===== */}
+      {showSettings && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowSettings(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, width: "90%", maxWidth: 440, maxHeight: "85vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            {/* Header */}
+            <div style={{ padding: "28px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: PRIMARY }}>语文作业智能批改</h2>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#999" }}>v1.0 · AI-Powered Essay Grading</p>
+              </div>
+              <button onClick={() => setShowSettings(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "none", background: "#f5f5f5", cursor: "pointer", fontSize: 16, color: "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+            </div>
+
+            {/* About */}
+            <div style={{ padding: "20px 28px" }}>
+              <div style={{ background: "linear-gradient(135deg, #f0f4ff, #faf8f5)", borderRadius: 12, padding: 20, marginBottom: 20 }}>
+                <div style={{ display: "flex", gap: 16 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg, ${PRIMARY}, #4a6fa5)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>📝</div>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 13, lineHeight: 1.8, color: "#555" }}>
+                      拍照上传小学语文作业，AI 自动识别手写文字并进行作文精批，生成修改建议、亮点分析和教师评语。
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Features */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 24 }}>
+                {[
+                  { icon: "📷", title: "OCR 识别", desc: "手写文字自动转文本" },
+                  { icon: "✏️", title: "智能批改", desc: "AI 逐段精批+总评" },
+                  { icon: "🎨", title: "图上标注", desc: "画笔、圆圈、文字批注" },
+                  { icon: "📥", title: "一键导出", desc: "批注图片直接下载" },
+                ].map((f, i) => (
+                  <div key={i} style={{ padding: "14px 12px", borderRadius: 10, border: "1px solid #f0f0f0", background: "#fafafa" }}>
+                    <span style={{ fontSize: 20 }}>{f.icon}</span>
+                    <p style={{ margin: "6px 0 2px", fontSize: 13, fontWeight: 600, color: "#333" }}>{f.title}</p>
+                    <p style={{ margin: 0, fontSize: 11, color: "#999" }}>{f.desc}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Usage info */}
+              <div style={{ padding: "14px 16px", borderRadius: 10, background: "#edf9f1", border: "1px solid #d0e8d8", marginBottom: 20 }}>
+                <p style={{ margin: 0, fontSize: 13, color: GREEN, fontWeight: 600 }}>✅ 免费使用</p>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#666", lineHeight: 1.6 }}>
+                  默认使用系统提供的 AI 服务，直接上传照片即可开始批改，无需任何配置。
+                </p>
+              </div>
+
+              {/* Advanced settings toggle */}
+              <div
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: 10, border: "1px solid #eee", cursor: "pointer", background: showAdvanced ? "#f8f9ff" : "#fff", transition: "all 0.2s" }}
+              >
+                <div>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#555" }}>⚙️ 高级设置</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 11, color: "#bbb" }}>自定义 API 接入（开发者选项）</p>
+                </div>
+                <span style={{ fontSize: 14, color: "#ccc", transform: showAdvanced ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▼</span>
+              </div>
+
+              {/* Advanced API config (collapsible) */}
+              {showAdvanced && (
+                <div style={{ marginTop: 12, padding: "16px", borderRadius: 10, border: "1px solid #e8e8e8", background: "#fafafa" }}>
+                  <p style={{ fontSize: 11, color: "#999", marginBottom: 14, lineHeight: 1.6 }}>
+                    如需使用自己的豆包（火山引擎 Ark）API，请填写以下信息。留空则使用系统默认配置。
+                  </p>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 4 }}>API Key</label>
+                    <input
+                      value={customApiKey} onChange={e => setCustomApiKey(e.target.value)}
+                      placeholder="留空使用默认"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, outline: "none", boxSizing: "border-box", transition: "border 0.2s" }}
+                      onFocus={e => e.target.style.borderColor = PRIMARY} onBlur={e => e.target.style.borderColor = "#ddd"}
+                    />
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 4 }}>Pro 接入点 ID（精批模型）</label>
+                    <input
+                      value={customEpPro} onChange={e => setCustomEpPro(e.target.value)}
+                      placeholder="如 ep-2024xxxxxxxxxx-xxxxx"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                      onFocus={e => e.target.style.borderColor = PRIMARY} onBlur={e => e.target.style.borderColor = "#ddd"}
+                    />
+                  </div>
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 4 }}>Fast 接入点 ID（OCR 模型）</label>
+                    <input
+                      value={customEpFast} onChange={e => setCustomEpFast(e.target.value)}
+                      placeholder="如 ep-2024xxxxxxxxxx-xxxxx"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                      onFocus={e => e.target.style.borderColor = PRIMARY} onBlur={e => e.target.style.borderColor = "#ddd"}
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      try { localStorage.setItem("hw_api_settings", JSON.stringify({ apiKey: customApiKey, epPro: customEpPro, epFast: customEpFast })); } catch {}
+                      setShowSettings(false);
+                      setCopyMsg("设置已保存"); setTimeout(() => setCopyMsg(""), 1500);
+                    }}
+                    style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    保存设置
+                  </button>
+                  <p style={{ fontSize: 10, color: "#ccc", marginTop: 8, textAlign: "center", lineHeight: 1.5 }}>
+                    API Key 仅保存在浏览器本地，不会上传至服务器
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: "16px 28px 24px", borderTop: "1px solid #f0f0f0", textAlign: "center" }}>
+              <p style={{ margin: 0, fontSize: 11, color: "#ccc" }}>Made with ❤️ for teachers · Powered by AI</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {copyMsg && (
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: GREEN, color: "#fff", padding: "8px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>{copyMsg}</div>
+      )}
+
       <div style={{ background: "linear-gradient(135deg," + PRIMARY + ",#1a2744)", padding: "14px 32px", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "20px", fontWeight: 700, letterSpacing: 2 }}>语文作业智能批改</h1>
@@ -596,6 +736,9 @@ export default function Home() {
           </button>
           <button onClick={exportAllPNGs} disabled={students.filter(s => s.status === "done").length === 0} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: students.filter(s => s.status === "done").length === 0 ? 0.5 : 1 }}>
             📥 导出所有图片
+          </button>
+          <button onClick={() => setShowSettings(true)} style={{ width: 38, height: 38, borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} title="设置与帮助">
+            ⚙️
           </button>
         </div>
       </div>

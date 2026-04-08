@@ -6,7 +6,7 @@ type Tool = "pen" | "text" | "circle" | "wavy" | "eraser" | "hand" | "penEraser"
 interface Student { id: string; name: string; className: string; images: File[]; imageUrls: string[]; ocrText: string; essayDetail: any | null; report: string; status: "idle" | "grading" | "done" | "error"; errorMsg?: string; archived?: boolean; }
 interface DrawAction { type: "pen" | "text" | "circle" | "wavy"; color: string; lineWidth: number; points?: { x: number; y: number }[]; x?: number; y?: number; w?: number; h?: number; endX?: number; text?: string; fontSize?: number; }
 
-const PRIMARY = "#2c3e6b", RED = "#c0392b", GREEN = "#27ae60", ORANGE = "#e67e22", BG = "#faf8f5";
+const PRIMARY = "#2D4A3E", PRIMARY_LIGHT = "#E8EEEB", PRIMARY_MID = "#C2D1CA", RED = "#9B4D46", GREEN = "#5A8A6A", ORANGE = "#B8865C", BG = "#FAFAF8";
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 const QUICK_STAMPS = [
   { label: "好词✓", color: RED }, { label: "好句✓", color: RED }, { label: "精彩!", color: RED },
@@ -72,6 +72,8 @@ export default function Home() {
   const [batchStatus, setBatchStatus] = useState("");
   const [parentNotice, setParentNotice] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [globalDragOver, setGlobalDragOver] = useState(false);
+  const globalDragCounter = useRef(0);
   const [tool, setTool] = useState<Tool>("pen");
   const [strokeColor, setStrokeColor] = useState(RED);
   const [penWidth] = useState(2);
@@ -100,6 +102,7 @@ export default function Home() {
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
   const [customApiKey, setCustomApiKey] = useState("");
   const [customEpPro, setCustomEpPro] = useState("");
   const [customEpFast, setCustomEpFast] = useState("");
@@ -371,6 +374,28 @@ export default function Home() {
     if (toolKeys[e.key] && !e.ctrlKey && !e.metaKey) { setTool(toolKeys[e.key]); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }
   } window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); });
 
+  // Global full-screen drag overlay
+  useEffect(() => {
+    function onDragEnter(e: DragEvent) { e.preventDefault(); globalDragCounter.current++; if (globalDragCounter.current === 1) setGlobalDragOver(true); }
+    function onDragLeave(e: DragEvent) { e.preventDefault(); globalDragCounter.current--; if (globalDragCounter.current <= 0) { globalDragCounter.current = 0; setGlobalDragOver(false); } }
+    function onDragOver(e: DragEvent) { e.preventDefault(); }
+    function onDrop(e: DragEvent) { e.preventDefault(); globalDragCounter.current = 0; setGlobalDragOver(false); }
+    window.addEventListener("dragenter", onDragEnter); window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("dragover", onDragOver); window.addEventListener("drop", onDrop);
+    return () => { window.removeEventListener("dragenter", onDragEnter); window.removeEventListener("dragleave", onDragLeave); window.removeEventListener("dragover", onDragOver); window.removeEventListener("drop", onDrop); };
+  }, []);
+  async function onGlobalDrop(e: React.DragEvent) {
+    e.preventDefault(); e.stopPropagation(); setGlobalDragOver(false); globalDragCounter.current = 0;
+    if (!activeStudentId) { alert("请先选择一个学生"); return; }
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+    if (files.length === 0) return;
+    const stu = students.find(s => s.id === activeStudentId); const existingCount = stu?.imageUrls.length || 0;
+    const dataUrls: string[] = [];
+    for (let i = 0; i < files.length; i++) { const dataUrl = await compressImage(files[i]); dataUrls.push(dataUrl); await saveOneImage(activeStudentId, existingCount + i, dataUrl); }
+    setStudents(prev => prev.map(s => s.id !== activeStudentId ? s : { ...s, images: [...s.images, ...files], imageUrls: [...s.imageUrls, ...dataUrls] }));
+    if (tab !== "upload") setTab("upload");
+  }
+
   function addStudent() { if (!newName.trim()) { alert("请输入学生姓名"); return; } const s: Student = { id: uid(), name: newName.trim(), className: currentClass, images: [], imageUrls: [], ocrText: "", essayDetail: null, report: "", status: "idle" }; setStudents(prev => [...prev, s]); setActiveStudentId(s.id); setNewName(""); }
   function removeStudent(id: string) { const stu = students.find(s => s.id === id); deleteStudentImages(id, stu?.imageUrls.length || 10); setStudents(prev => { const next = prev.filter(s => s.id !== id); if (activeStudentId === id) { const fallback = next.find(s => !s.archived && s.className === currentClass); setActiveStudentId(fallback?.id || ""); } return next; }); setLoading(false); setProgress(0); setStepText(""); setBatchStatus(""); }
   function archiveStudent(id: string) { setStudents(prev => { const next = prev.map(s => s.id === id ? { ...s, archived: true } : s); if (activeStudentId === id) { const fallback = next.find(s => !s.archived && s.className === currentClass && s.id !== id); setActiveStudentId(fallback?.id || ""); } return next; }); }
@@ -518,131 +543,162 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Noto Sans SC','Microsoft YaHei',sans-serif", color: "#333" }}>
+      {/* Full-screen drop overlay */}
+      {globalDragOver && (
+        <div onDrop={onGlobalDrop} onDragOver={e => e.preventDefault()} style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(45,74,62,0.08)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+          <div style={{ background: "#fff", borderRadius: 20, padding: "48px 64px", textAlign: "center", boxShadow: "0 8px 40px rgba(0,0,0,0.1)", border: "2px dashed " + PRIMARY_MID, transform: "scale(1)", animation: "none" }}>
+            <div style={{ width: 56, height: 56, borderRadius: 16, background: PRIMARY_LIGHT, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 24 }}>+</div>
+            <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1F2937" }}>释放以导入作业照片</p>
+            <p style={{ margin: "8px 0 0", fontSize: 13, color: "#9CA3AF" }}>{activeStudentId ? "将添加到当前选中的学生" : "请先选择一个学生"}</p>
+          </div>
+        </div>
+      )}
       {previewUrl && <div onClick={() => setPreviewUrl(null)} style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}><button onClick={() => setPreviewUrl(null)} style={{ position: "absolute", top: 20, right: 20, width: 44, height: 44, borderRadius: "50%", background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>✕</button><img src={previewUrl} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", objectFit: "contain", borderRadius: 8 }} /></div>}
       {copyMsg && <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: GREEN, color: "#fff", padding: "8px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>{copyMsg}</div>}
-      {parentNotice && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 420, width: "90%" }}><h3 style={{ marginBottom: 12 }}>📱 家长通知</h3><pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, background: "#f9f9f9", padding: 12, borderRadius: 8 }}>{parentNotice}</pre><div style={{ display: "flex", gap: 8, marginTop: 12 }}><button onClick={() => { clipCopy(parentNotice, "已复制通知"); }} style={{ flex: 1, padding: 8, borderRadius: 6, border: "none", background: GREEN, color: "#fff", cursor: "pointer", fontWeight: 600 }}>复制</button><button onClick={() => setParentNotice(null)} style={{ flex: 1, padding: 8, borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>关闭</button></div></div></div>}
+      {parentNotice && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 420, width: "90%" }}><h3 style={{ marginBottom: 12 }}>家长通知</h3><pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, background: "#f9f9f9", padding: 12, borderRadius: 8 }}>{parentNotice}</pre><div style={{ display: "flex", gap: 8, marginTop: 12 }}><button onClick={() => { clipCopy(parentNotice, "已复制通知"); }} style={{ flex: 1, padding: 8, borderRadius: 6, border: "none", background: GREEN, color: "#fff", cursor: "pointer", fontWeight: 600 }}>复制</button><button onClick={() => setParentNotice(null)} style={{ flex: 1, padding: 8, borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>关闭</button></div></div></div>}
 
-      {/* Settings Modal - Beautiful version */}
+      {/* Settings Modal */}
       {showSettings && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowSettings(false)}>
-        <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, width: "90%", maxWidth: 440, maxHeight: "85vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, width: "90%", maxWidth: 440, maxHeight: "85vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.12)" }}>
           <div style={{ padding: "28px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div><h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: PRIMARY }}>语文作业智能批改</h2><p style={{ margin: "4px 0 0", fontSize: 12, color: "#999" }}>v1.0 · AI-Powered Essay Grading</p></div>
-            <button onClick={() => setShowSettings(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "none", background: "#f5f5f5", cursor: "pointer", fontSize: 16, color: "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+            <div><h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#1F2937" }}>语文作业智能批改</h2><p style={{ margin: "4px 0 0", fontSize: 12, color: "#9CA3AF" }}>v1.0 · AI-Powered Essay Grading</p></div>
+            <button onClick={() => setShowSettings(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8E4", background: "#fff", cursor: "pointer", fontSize: 16, color: "#9CA3AF", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
           </div>
           <div style={{ padding: "20px 28px" }}>
-            <div style={{ background: "linear-gradient(135deg, #f0f4ff, #faf8f5)", borderRadius: 12, padding: 20, marginBottom: 20 }}>
-              <div style={{ display: "flex", gap: 16 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg, ${PRIMARY}, #4a6fa5)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>📝</div>
-                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.8, color: "#555" }}>拍照上传小学语文作业，AI 自动识别手写文字并进行作文精批，生成修改建议、亮点分析和教师评语。</p>
-              </div>
+            <div style={{ background: PRIMARY_LIGHT, borderRadius: 12, padding: 20, marginBottom: 20 }}>
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.8, color: "#374151" }}>拍照上传小学语文作业，AI 自动识别手写文字并进行作文精批，生成修改建议、亮点分析和教师评语。</p>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 24 }}>
-              {[{ icon: "📷", title: "OCR 识别", desc: "手写文字自动转文本" }, { icon: "✏️", title: "智能批改", desc: "AI 逐段精批+总评" }, { icon: "🎨", title: "图上标注", desc: "画笔、圆圈、文字批注" }, { icon: "📥", title: "一键导出", desc: "批注图片直接下载" }].map((f, i) => (
-                <div key={i} style={{ padding: "14px 12px", borderRadius: 10, border: "1px solid #f0f0f0", background: "#fafafa" }}><span style={{ fontSize: 20 }}>{f.icon}</span><p style={{ margin: "6px 0 2px", fontSize: 13, fontWeight: 600, color: "#333" }}>{f.title}</p><p style={{ margin: 0, fontSize: 11, color: "#999" }}>{f.desc}</p></div>
+              {[{ title: "OCR 识别", desc: "手写文字自动转文本" }, { title: "智能批改", desc: "AI 逐段精批+总评" }, { title: "图上标注", desc: "画笔、圆圈、文字批注" }, { title: "一键导出", desc: "批注图片直接下载" }].map((f, i) => (
+                <div key={i} style={{ padding: "14px 12px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#fff" }}><p style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 600, color: "#374151" }}>{f.title}</p><p style={{ margin: 0, fontSize: 11, color: "#9CA3AF" }}>{f.desc}</p></div>
               ))}
             </div>
-            <div style={{ padding: "14px 16px", borderRadius: 10, background: "#edf9f1", border: "1px solid #d0e8d8", marginBottom: 20 }}><p style={{ margin: 0, fontSize: 13, color: GREEN, fontWeight: 600 }}>✅ 免费使用</p><p style={{ margin: "4px 0 0", fontSize: 12, color: "#666", lineHeight: 1.6 }}>默认使用系统提供的 AI 服务，直接上传照片即可开始批改，无需任何配置。</p></div>
-            <div onClick={() => setShowAdvanced(!showAdvanced)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: 10, border: "1px solid #eee", cursor: "pointer", background: showAdvanced ? "#f8f9ff" : "#fff", transition: "all 0.2s" }}>
-              <div><p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#555" }}>⚙️ 高级设置</p><p style={{ margin: "2px 0 0", fontSize: 11, color: "#bbb" }}>自定义 API 接入（开发者选项）</p></div>
-              <span style={{ fontSize: 14, color: "#ccc", transform: showAdvanced ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▼</span>
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "#F0F7F2", border: "1px solid #D4E5D9", marginBottom: 20 }}><p style={{ margin: 0, fontSize: 13, color: GREEN, fontWeight: 600 }}>免费使用</p><p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7280", lineHeight: 1.6 }}>默认使用系统提供的 AI 服务，直接上传照片即可开始批改，无需任何配置。</p></div>
+            <div onClick={() => setShowAdvanced(!showAdvanced)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: 10, border: "1px solid #E8E8E4", cursor: "pointer", background: showAdvanced ? PRIMARY_LIGHT : "#fff", transition: "all 0.2s" }}>
+              <div><p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#374151" }}>高级设置</p><p style={{ margin: "2px 0 0", fontSize: 11, color: "#9CA3AF" }}>自定义 API 接入（开发者选项）</p></div>
+              <span style={{ fontSize: 12, color: "#9CA3AF", transform: showAdvanced ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▼</span>
             </div>
-            {showAdvanced && <div style={{ marginTop: 12, padding: 16, borderRadius: 10, border: "1px solid #e8e8e8", background: "#fafafa" }}>
-              <p style={{ fontSize: 11, color: "#999", marginBottom: 14, lineHeight: 1.6 }}>如需使用自己的豆包（火山引擎 Ark）API，请填写以下信息。留空则使用系统默认配置。</p>
-              <div style={{ marginBottom: 12 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 4 }}>API Key</label><input value={customApiKey} onChange={e => setCustomApiKey(e.target.value)} placeholder="留空使用默认" style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
-              <div style={{ marginBottom: 12 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 4 }}>Pro 接入点 ID（精批模型）</label><input value={customEpPro} onChange={e => setCustomEpPro(e.target.value)} placeholder="如 ep-2024xxxxxxxxxx-xxxxx" style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
-              <div style={{ marginBottom: 14 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 4 }}>Fast 接入点 ID（OCR模型）</label><input value={customEpFast} onChange={e => setCustomEpFast(e.target.value)} placeholder="如 ep-2024xxxxxxxxxx-xxxxx" style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
+            {showAdvanced && <div style={{ marginTop: 12, padding: 16, borderRadius: 10, border: "1px solid #E8E8E4", background: "#FAFAF8" }}>
+              <p style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 14, lineHeight: 1.6 }}>如需使用自己的豆包（火山引擎 Ark）API，请填写以下信息。留空则使用系统默认配置。</p>
+              <div style={{ marginBottom: 12 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>API Key</label><input value={customApiKey} onChange={e => setCustomApiKey(e.target.value)} placeholder="留空使用默认" style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
+              <div style={{ marginBottom: 12 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Pro 接入点 ID（精批模型）</label><input value={customEpPro} onChange={e => setCustomEpPro(e.target.value)} placeholder="如 ep-2024xxxxxxxxxx-xxxxx" style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
+              <div style={{ marginBottom: 14 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Fast 接入点 ID（OCR模型）</label><input value={customEpFast} onChange={e => setCustomEpFast(e.target.value)} placeholder="如 ep-2024xxxxxxxxxx-xxxxx" style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
               <button onClick={() => { try { localStorage.setItem("hw_api_settings", JSON.stringify({ apiKey: customApiKey, epPro: customEpPro, epFast: customEpFast })); } catch {} setShowSettings(false); setCopyMsg("设置已保存"); setTimeout(() => setCopyMsg(""), 1500); }} style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>保存设置</button>
-              <p style={{ fontSize: 10, color: "#ccc", marginTop: 8, textAlign: "center", lineHeight: 1.5 }}>API Key 仅保存在浏览器本地，不会上传至服务器</p>
+              <p style={{ fontSize: 10, color: "#D1D5DB", marginTop: 8, textAlign: "center", lineHeight: 1.5 }}>API Key 仅保存在浏览器本地，不会上传至服务器</p>
             </div>}
           </div>
-          <div style={{ padding: "16px 28px 24px", borderTop: "1px solid #f0f0f0", textAlign: "center" }}><p style={{ margin: 0, fontSize: 11, color: "#ccc" }}>Made with ❤️ for teachers · Powered by AI</p></div>
+          <div style={{ padding: "16px 28px 24px", borderTop: "1px solid #E8E8E4", textAlign: "center" }}><p style={{ margin: 0, fontSize: 11, color: "#D1D5DB" }}>Made for teachers · Powered by AI</p></div>
         </div>
       </div>}
 
-      <div style={{ background: `linear-gradient(135deg, ${PRIMARY}, #1a2a4a)`, padding: isMobile ? "12px 16px" : "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <div><h1 style={{ fontSize: isMobile ? 16 : 20, fontWeight: 700, color: "#fff", margin: 0 }}>语文作业智能批改</h1><p style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", margin: 0 }}>上传照片 → AI自动批注 → 微调导出</p></div>
+      <div style={{ background: "#fff", padding: isMobile ? "12px 16px" : "16px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, borderBottom: "1px solid #E8E8E4" }}>
+        <div><h1 style={{ fontSize: isMobile ? 16 : 19, fontWeight: 700, color: "#1F2937", margin: 0, letterSpacing: 0.5 }}>语文作业智能批改</h1><p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>上传照片 · AI批注 · 导出</p></div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <button onClick={runBatchGrading} disabled={loading} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.5 : 1 }}>🚀 批改全部</button>
-          <button onClick={exportAllPNGs} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>📥 导出图片</button>
-          <button onClick={exportData} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>💾 备份</button>
-          <button onClick={() => importFileRef.current?.click()} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer" }}>📂 恢复</button>
-          <button onClick={() => setShowSettings(true)} style={{ width: 38, height: 38, borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} title="设置与帮助">⚙️</button>
+          <button onClick={runBatchGrading} disabled={loading} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "none", background: PRIMARY, color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.5 : 1 }}>批改全部</button>
+          <button onClick={exportAllPNGs} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#374151", fontSize: isMobile ? 11 : 13, fontWeight: 500, cursor: "pointer" }}>导出图片</button>
+          <button onClick={exportData} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#374151", fontSize: isMobile ? 11 : 13, fontWeight: 500, cursor: "pointer" }}>备份</button>
+          <button onClick={() => importFileRef.current?.click()} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#374151", fontSize: isMobile ? 11 : 13, fontWeight: 500, cursor: "pointer" }}>恢复</button>
+          <button onClick={() => setShowSettings(true)} style={{ width: 36, height: 36, borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} title="设置">⚙</button>
           <input ref={importFileRef} type="file" accept=".json" onChange={importData} style={{ display: "none" }} />
         </div>
       </div>
-      {batchStatus && <div style={{ background: "#edf9f1", padding: "10px 32px", fontSize: 14, fontWeight: 600, color: GREEN, borderBottom: "1px solid #d0e8d8" }}>{batchStatus}</div>}
+      {batchStatus && <div style={{ background: "#F0F7F2", padding: "10px 32px", fontSize: 14, fontWeight: 600, color: GREEN, borderBottom: "1px solid #D4E5D9" }}>{batchStatus}</div>}
 
       <div style={{ maxWidth: 1400, margin: "0 auto", padding: "12px 20px" }}>
-        <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #e0e0e0", marginBottom: 16 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>📤 上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>📝 批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>📦 储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>
+        <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 16 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>
 
         {tab === "upload" && (
-          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 16 : 24 }}>
-            <div style={{ width: isMobile ? "100%" : "55%", flexShrink: 0 }}>
-              {/* Class tabs with delete */}
-              <div style={{ display: "flex", gap: 4, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
-                {classNames.map(cn => (
-                  <div key={cn} style={{ display: "inline-flex", alignItems: "center" }}>
-                    <button onClick={() => { setCurrentClass(cn); setActiveStudentId(students.find(s => !s.archived && s.className === cn)?.id || ""); }} style={{ padding: "5px 14px", borderRadius: cn !== "默认班" ? "6px 0 0 6px" : 6, border: "none", cursor: "pointer", background: currentClass === cn ? PRIMARY : "#eee", color: currentClass === cn ? "#fff" : "#666", fontWeight: 600, fontSize: 12 }}>{cn}</button>
-                    {cn !== "默认班" && <button onClick={() => deleteClass(cn)} title={"删除班级 " + cn} style={{ padding: "5px 6px", borderRadius: "0 6px 6px 0", border: "none", cursor: "pointer", background: currentClass === cn ? "#1a2a4a" : "#ddd", color: currentClass === cn ? "rgba(255,255,255,0.7)" : "#999", fontSize: 10 }}>✕</button>}
-                  </div>
-                ))}
-                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                  <input value={newClassName} onChange={e => setNewClassName(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && newClassName.trim()) { if (!classNames.includes(newClassName.trim())) setClassNames(prev => [...prev, newClassName.trim()]); setCurrentClass(newClassName.trim()); setNewClassName(""); } }} placeholder="新班级" style={{ width: 70, padding: "4px 8px", borderRadius: 4, border: "1px solid #ddd", fontSize: 11, outline: "none" }} />
-                  <button onClick={() => { if (newClassName.trim() && !classNames.includes(newClassName.trim())) { setClassNames(prev => [...prev, newClassName.trim()]); setCurrentClass(newClassName.trim()); setNewClassName(""); } }} style={{ padding: "4px 8px", borderRadius: 4, border: "none", background: "#eee", fontSize: 11, cursor: "pointer" }}>+</button>
-                </div>
+          <div>
+            {/* Config summary bar */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", marginBottom: 16, background: "#fff", borderRadius: 10, border: "1px solid #E8E8E4" }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 13, color: "#6B7280" }}>
+                <span>当前：<strong style={{ color: "#374151" }}>{grade}</strong></span>
+                <span style={{ color: "#D1D5DB" }}>|</span>
+                <span><strong style={{ color: "#374151" }}>{topic}</strong></span>
+                {specialReq && <><span style={{ color: "#D1D5DB" }}>|</span><span style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block", verticalAlign: "bottom" }}>要求：{specialReq}</span></>}
+                {modelImageUrls.length > 0 && <><span style={{ color: "#D1D5DB" }}>|</span><span style={{ color: GREEN }}>范文 {modelImageUrls.length} 张</span></>}
               </div>
-
-              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13, outline: "none" }} /><button onClick={addStudent} style={{ padding: "8px 10px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>添加</button></div>
-
-              {classStudents.length > 0 && <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
-                <button onClick={selectAllForBatch} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid #ddd", background: "#fff", fontSize: 11, cursor: "pointer" }}>全选</button>
-                <button onClick={deselectAllForBatch} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid #ddd", background: "#fff", fontSize: 11, cursor: "pointer" }}>取消全选</button>
-                {selectedForBatch.size > 0 && <span style={{ fontSize: 11, color: PRIMARY, fontWeight: 600 }}>已选 {selectedForBatch.size} 人</span>}
-              </div>}
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                {classStudents.length === 0 && <p style={{ fontSize: 13, color: "#bbb", textAlign: "center", padding: "20px 0" }}>请先添加学生</p>}
-                {classStudents.map(s => (<div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <input type="checkbox" checked={selectedForBatch.has(s.id)} onChange={() => toggleBatchSelect(s.id)} style={{ cursor: "pointer", accentColor: PRIMARY }} />
-                  <div onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} style={{ flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#fff", color: activeStudentId === s.id ? "#fff" : "#333", border: activeStudentId === s.id ? "none" : "1px solid #eee" }}>
-                  <div><span style={{ fontWeight: 600, fontSize: 14 }}>{s.name}</span><span style={{ marginLeft: 8, fontSize: 11, padding: "2px 6px", borderRadius: 4, background: s.status === "done" ? GREEN : s.status === "grading" ? "#f39c12" : s.status === "error" ? RED : "#eee", color: s.status === "idle" ? "#999" : "#fff" }}>{s.status === "done" ? "已批改" : s.status === "grading" ? "批改中" : s.status === "error" ? "出错" : (s.images.length || s.imageUrls.length) + "张"}</span></div>
-                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                    {s.status === "error" && <button onClick={e => { e.stopPropagation(); retryGrading(s.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "#ffd" : ORANGE, fontSize: 12, fontWeight: 600 }}>🔄</button>}
-                    {s.status === "done" && <button onClick={e => { e.stopPropagation(); archiveStudent(s.id); }} title="归档" style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "rgba(255,255,255,0.7)" : "#aaa", fontSize: 13 }}>📦</button>}
-                    <button onClick={e => { e.stopPropagation(); removeStudent(s.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: activeStudentId === s.id ? "rgba(255,255,255,0.6)" : "#ccc", fontSize: 16 }}>✕</button>
-                  </div>
-                </div></div>))}
-              </div>
-              {activeStudent && activeStudent.className === currentClass && <>
-                <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: "#555" }}>{activeStudent.name} 的作业照片</h4>
-                {activeStudent.status === "error" && <div style={{ background: "#fef2f2", border: "1px solid #f0c0c0", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}><span style={{ color: RED, flex: 1, wordBreak: "break-all" }}>❌ {activeStudent.errorMsg || "出错"}</span><button onClick={() => retryGrading(activeStudent.id)} disabled={loading} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", marginLeft: 8 }}>🔄 重试</button></div>}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: 12, borderRadius: 10, border: dragOver ? "2px dashed " + PRIMARY : "1px dashed #ccc", background: dragOver ? "#e8ecf4" : "#fafafa", marginBottom: 12 }} onDrop={onDropImages} onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }} onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}>
-                  {activeStudent.imageUrls.map((url, i) => (<div key={i} onClick={() => setPreviewUrl(url)} style={{ width: 80, height: 105, borderRadius: 6, overflow: "hidden", border: "1px solid #ddd", position: "relative", cursor: "pointer", flexShrink: 0 }}><img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={e => { e.stopPropagation(); removeImage(activeStudent.id, i); }} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button><div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 9, textAlign: "center", padding: 2 }}>{"第" + (i + 1) + "页"}</div></div>))}
-                  <div onClick={() => addFileInputRef.current?.click()} style={{ width: 80, height: 105, borderRadius: 6, border: "2px dashed #ccc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fff", color: "#bbb", flexShrink: 0 }}><span style={{ fontSize: 24 }}>+</span><span style={{ fontSize: 10 }}>拖拽或点击</span><input ref={addFileInputRef} type="file" accept="image/*" multiple onChange={onPickImages} style={{ display: "none" }} /></div>
-                </div>
-              </>}
+              <button onClick={() => setShowConfig(!showConfig)} style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid #E0E0DC", background: showConfig ? PRIMARY_LIGHT : "#fff", color: showConfig ? PRIMARY : "#6B7280", fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>{showConfig ? "收起配置" : "修改配置"}</button>
             </div>
 
-            <div style={{ flex: 1, padding: 20, borderRadius: 12, border: "1px solid #e0e0e0", background: "#fff", alignSelf: "flex-start" }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: PRIMARY, margin: "0 0 14px" }}>⚙️ 批改设置</h3>
-              <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 4 }}>年级</label><select value={grade} onChange={e => setGrade(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 13 }}>{["一年级上","一年级下","二年级上","二年级下","三年级上","三年级下","四年级上","四年级下","五年级上","五年级下","六年级上","六年级下"].map(g => <option key={g}>{g}</option>)}</select></div>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 4 }}>主题</label><select value={topic} onChange={e => setTopic(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 13 }}>{["看图写话","写人","记事","写景","状物","想象作文","日记","书信","读后感","中华传统节日","自由命题","童话","其他"].map(t => <option key={t}>{t}</option>)}</select></div>
-              </div>
-              <div style={{ marginBottom: 12 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 4 }}>📝 特殊要求（选填）</label><textarea value={specialReq} onChange={e => setSpecialReq(e.target.value)} placeholder="例如：这次写童话，注意想象力和拟人手法…" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ddd", fontSize: 12, minHeight: 40, resize: "vertical", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} /></div>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 6 }}>📄 范文模板（选填，可拖拽多张）</label>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: 8, borderRadius: 8, border: modelDragOver ? "2px dashed " + PRIMARY : "1px dashed #ccc", background: modelDragOver ? "#e8ecf4" : "#fafafa", minHeight: 50 }} onDrop={onDropModelImages} onDragOver={e => { e.preventDefault(); e.stopPropagation(); setModelDragOver(true); }} onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setModelDragOver(false); }}>
-                  {modelImageUrls.map((url, i) => (<div key={i} onClick={() => setPreviewUrl(url)} style={{ width: 50, height: 65, borderRadius: 4, overflow: "hidden", border: "1px solid #ddd", position: "relative", cursor: "pointer", flexShrink: 0 }}><img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={e => { e.stopPropagation(); removeModelImage(i); }} style={{ position: "absolute", top: 1, right: 1, width: 14, height: 14, borderRadius: "50%", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", cursor: "pointer", fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button></div>))}
-                  <div onClick={() => modelFileRef.current?.click()} style={{ width: 50, height: 65, borderRadius: 4, border: "2px dashed #ccc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fff", color: "#bbb", fontSize: 9, flexShrink: 0 }}><span style={{ fontSize: 18 }}>+</span><span>范文</span></div>
-                  <input ref={modelFileRef} type="file" accept="image/*" multiple onChange={onPickModelImages} style={{ display: "none" }} />
+            {/* Collapsible config panel */}
+            <div style={{ maxHeight: showConfig ? 400 : 0, overflow: "hidden", transition: "max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease", opacity: showConfig ? 1 : 0, marginBottom: showConfig ? 16 : 0 }}>
+              <div style={{ padding: 20, borderRadius: 12, border: "1px solid #E8E8E4", background: "#fff" }}>
+                <div style={{ display: "flex", gap: 16, marginBottom: 12, flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 160px", minWidth: 140 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", display: "block", marginBottom: 4 }}>年级</label><select value={grade} onChange={e => setGrade(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 13, outline: "none" }}>{["一年级上","一年级下","二年级上","二年级下","三年级上","三年级下","四年级上","四年级下","五年级上","五年级下","六年级上","六年级下"].map(g => <option key={g}>{g}</option>)}</select></div>
+                  <div style={{ flex: "1 1 160px", minWidth: 140 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", display: "block", marginBottom: 4 }}>主题</label><select value={topic} onChange={e => setTopic(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 13, outline: "none" }}>{["看图写话","写人","记事","写景","状物","想象作文","日记","书信","读后感","中华传统节日","自由命题","童话","其他"].map(t => <option key={t}>{t}</option>)}</select></div>
+                  <div style={{ flex: "2 1 280px", minWidth: 200 }}><label style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", display: "block", marginBottom: 4 }}>特殊要求（选填）</label><input value={specialReq} onChange={e => setSpecialReq(e.target.value)} placeholder="例如：注意想象力和拟人手法…" style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 12, outline: "none", boxSizing: "border-box" }} /></div>
                 </div>
-                {modelImageUrls.length > 0 && <p style={{ fontSize: 11, color: "#999", marginTop: 4 }}>已添加 {modelImageUrls.length} 张范文，批改时自动对比</p>}
-                {modelText && <p style={{ fontSize: 11, color: GREEN, marginTop: 2 }}>✅ 范文已分析（复用中）</p>}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", display: "block", marginBottom: 6 }}>范文模板（选填，可拖拽多张）</label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: 8, borderRadius: 8, border: modelDragOver ? "2px dashed " + PRIMARY : "1px dashed #D1D5DB", background: modelDragOver ? PRIMARY_LIGHT : "#FAFAF8", minHeight: 50, transition: "all 0.2s" }} onDrop={onDropModelImages} onDragOver={e => { e.preventDefault(); e.stopPropagation(); setModelDragOver(true); }} onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setModelDragOver(false); }}>
+                    {modelImageUrls.map((url, i) => (<div key={i} onClick={() => setPreviewUrl(url)} style={{ width: 50, height: 65, borderRadius: 6, overflow: "hidden", border: "1px solid #E0E0DC", position: "relative", cursor: "pointer", flexShrink: 0 }}><img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={e => { e.stopPropagation(); removeModelImage(i); }} style={{ position: "absolute", top: 1, right: 1, width: 14, height: 14, borderRadius: "50%", background: "rgba(0,0,0,0.4)", color: "#fff", border: "none", cursor: "pointer", fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button></div>))}
+                    <div onClick={() => modelFileRef.current?.click()} style={{ width: 50, height: 65, borderRadius: 6, border: "2px dashed #D1D5DB", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fff", color: "#9CA3AF", fontSize: 9, flexShrink: 0 }}><span style={{ fontSize: 18 }}>+</span><span>范文</span></div>
+                    <input ref={modelFileRef} type="file" accept="image/*" multiple onChange={onPickModelImages} style={{ display: "none" }} />
+                  </div>
+                  {modelText && <p style={{ fontSize: 11, color: GREEN, marginTop: 4 }}>范文已分析（复用中）</p>}
+                </div>
               </div>
-              {activeStudent && <button disabled={(activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading} onClick={runGrading} style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", fontSize: 14, fontWeight: 700, color: "#fff", cursor: (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading ? "not-allowed" : "pointer", background: (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading ? "#ccc" : PRIMARY, marginBottom: 8 }}>{loading ? stepText : "批改 " + activeStudent.name + "（" + (activeStudent.images.length || activeStudent.imageUrls.length) + " 张）"}</button>}
-              <button disabled={loading} onClick={runBatchGrading} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid " + PRIMARY, fontSize: 13, fontWeight: 600, color: PRIMARY, cursor: loading ? "not-allowed" : "pointer", background: "#fff" }}>{selectedForBatch.size > 0 ? `🚀 批改已选 ${selectedForBatch.size} 人` : "🚀 一键批改全部待批改学生"}</button>
-              {loading && <div style={{ marginTop: 10 }}><div style={{ width: "100%", height: 5, borderRadius: 3, background: "#eee" }}><div style={{ width: progress + "%", height: "100%", borderRadius: 3, background: PRIMARY, transition: "width 0.5s" }} /></div><p style={{ fontSize: 11, color: "#888", textAlign: "center", marginTop: 4 }}>{progress}% · {stepText}</p></div>}
+            </div>
+
+            {/* Main content area — now full width */}
+            <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 16 : 24 }}>
+              {/* LEFT: class + student list */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {/* Class tabs */}
+                <div style={{ display: "flex", gap: 4, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  {classNames.map(cn => (
+                    <div key={cn} style={{ display: "inline-flex", alignItems: "center" }}>
+                      <button onClick={() => { setCurrentClass(cn); setActiveStudentId(students.find(s => !s.archived && s.className === cn)?.id || ""); }} style={{ padding: "5px 14px", borderRadius: cn !== "默认班" ? "6px 0 0 6px" : 6, border: currentClass === cn ? "1px solid " + PRIMARY : "1px solid #E0E0DC", cursor: "pointer", background: currentClass === cn ? PRIMARY_LIGHT : "#fff", color: currentClass === cn ? PRIMARY : "#6B7280", fontWeight: 600, fontSize: 12, transition: "all 0.15s" }}>{cn}</button>
+                      {cn !== "默认班" && <button onClick={() => deleteClass(cn)} title={"删除班级 " + cn} style={{ padding: "5px 6px", borderRadius: "0 6px 6px 0", border: currentClass === cn ? "1px solid " + PRIMARY : "1px solid #E0E0DC", borderLeft: "none", cursor: "pointer", background: currentClass === cn ? PRIMARY_MID : "#f5f5f3", color: currentClass === cn ? PRIMARY : "#999", fontSize: 10 }}>✕</button>}
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    <input value={newClassName} onChange={e => setNewClassName(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && newClassName.trim()) { if (!classNames.includes(newClassName.trim())) setClassNames(prev => [...prev, newClassName.trim()]); setCurrentClass(newClassName.trim()); setNewClassName(""); } }} placeholder="新班级" style={{ width: 70, padding: "4px 8px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 11, outline: "none" }} />
+                    <button onClick={() => { if (newClassName.trim() && !classNames.includes(newClassName.trim())) { setClassNames(prev => [...prev, newClassName.trim()]); setCurrentClass(newClassName.trim()); setNewClassName(""); } }} style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #E0E0DC", background: "#fff", fontSize: 11, cursor: "pointer", color: "#6B7280" }}>+</button>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                  <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 13, outline: "none" }} />
+                  <button onClick={addStudent} style={{ padding: "8px 10px", borderRadius: 8, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap", transition: "opacity 0.15s" }}>添加</button>
+                </div>
+
+                {classStudents.length > 0 && <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+                  <button onClick={selectAllForBatch} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", background: "#fff", fontSize: 11, cursor: "pointer", color: "#6B7280" }}>全选</button>
+                  <button onClick={deselectAllForBatch} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", background: "#fff", fontSize: 11, cursor: "pointer", color: "#6B7280" }}>取消全选</button>
+                  {selectedForBatch.size > 0 && <span style={{ fontSize: 11, color: PRIMARY, fontWeight: 600 }}>已选 {selectedForBatch.size} 人</span>}
+                  {selectedForBatch.size > 0 && <button disabled={loading} onClick={runBatchGrading} style={{ padding: "3px 12px", borderRadius: 6, border: "none", background: PRIMARY, color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600, marginLeft: 4 }}>批改已选</button>}
+                </div>}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+                  {classStudents.length === 0 && <p style={{ fontSize: 13, color: "#D1D5DB", textAlign: "center", padding: "20px 0" }}>请先添加学生</p>}
+                  {classStudents.map(s => (<div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input type="checkbox" checked={selectedForBatch.has(s.id)} onChange={() => toggleBatchSelect(s.id)} style={{ cursor: "pointer", accentColor: PRIMARY }} />
+                    <div onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} style={{ flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: activeStudentId === s.id ? PRIMARY_LIGHT : "#fff", color: activeStudentId === s.id ? PRIMARY : "#374151", border: activeStudentId === s.id ? "1px solid " + PRIMARY_MID : "1px solid #E8E8E4", borderLeft: activeStudentId === s.id ? "3px solid " + PRIMARY : "1px solid #E8E8E4", transition: "all 0.15s" }}>
+                    <div><span style={{ fontWeight: 600, fontSize: 14 }}>{s.name}</span><span style={{ marginLeft: 8, fontSize: 11, padding: "2px 6px", borderRadius: 4, background: s.status === "done" ? GREEN : s.status === "grading" ? ORANGE : s.status === "error" ? RED : "#f0f0ee", color: s.status === "idle" ? "#9CA3AF" : "#fff" }}>{s.status === "done" ? "已批改" : s.status === "grading" ? "批改中" : s.status === "error" ? "出错" : (s.images.length || s.imageUrls.length) + "张"}</span></div>
+                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                      {s.status === "error" && <button onClick={e => { e.stopPropagation(); retryGrading(s.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: ORANGE, fontSize: 12, fontWeight: 600 }}>重试</button>}
+                      {s.status === "done" && <button onClick={e => { e.stopPropagation(); archiveStudent(s.id); }} title="归档" style={{ background: "transparent", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 12 }}>归档</button>}
+                      <button onClick={e => { e.stopPropagation(); removeStudent(s.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#D1D5DB", fontSize: 16 }}>✕</button>
+                    </div>
+                  </div></div>))}
+                </div>
+              </div>
+
+              {/* RIGHT: photo upload + grading buttons */}
+              {activeStudent && activeStudent.className === currentClass && (
+                <div style={{ width: isMobile ? "100%" : 360, flexShrink: 0 }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: "#374151" }}>{activeStudent.name} 的作业照片</h4>
+                  {activeStudent.status === "error" && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}><span style={{ color: RED, flex: 1, wordBreak: "break-all" }}>{activeStudent.errorMsg || "出错"}</span><button onClick={() => retryGrading(activeStudent.id)} disabled={loading} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", marginLeft: 8 }}>重试</button></div>}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: 16, borderRadius: 10, border: dragOver ? "2px dashed " + PRIMARY : "1px dashed #D1D5DB", background: dragOver ? PRIMARY_LIGHT : "#fff", marginBottom: 16, transition: "all 0.2s" }} onDrop={onDropImages} onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }} onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}>
+                    {activeStudent.imageUrls.map((url, i) => (<div key={i} onClick={() => setPreviewUrl(url)} style={{ width: 80, height: 105, borderRadius: 8, overflow: "hidden", border: "1px solid #E0E0DC", position: "relative", cursor: "pointer", flexShrink: 0 }}><img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={e => { e.stopPropagation(); removeImage(activeStudent.id, i); }} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.4)", color: "#fff", border: "none", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button><div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.35)", color: "#fff", fontSize: 9, textAlign: "center", padding: 2 }}>{"第" + (i + 1) + "页"}</div></div>))}
+                    <div onClick={() => addFileInputRef.current?.click()} style={{ width: 80, height: 105, borderRadius: 8, border: "2px dashed #D1D5DB", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#FAFAF8", color: "#9CA3AF", flexShrink: 0 }}><span style={{ fontSize: 24 }}>+</span><span style={{ fontSize: 10 }}>拖拽或点击</span><input ref={addFileInputRef} type="file" accept="image/*" multiple onChange={onPickImages} style={{ display: "none" }} /></div>
+                  </div>
+                  <button disabled={(activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading} onClick={runGrading} style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", fontSize: 14, fontWeight: 700, color: "#fff", cursor: (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading ? "not-allowed" : "pointer", background: (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) || loading ? "#D1D5DB" : PRIMARY, transition: "background 0.2s" }}>{loading ? stepText : "批改 " + activeStudent.name + "（" + (activeStudent.images.length || activeStudent.imageUrls.length) + " 张）"}</button>
+                  {loading && <div style={{ marginTop: 10 }}><div style={{ width: "100%", height: 4, borderRadius: 2, background: "#E8E8E4" }}><div style={{ width: progress + "%", height: "100%", borderRadius: 2, background: PRIMARY, transition: "width 0.5s" }} /></div><p style={{ fontSize: 11, color: "#9CA3AF", textAlign: "center", marginTop: 4 }}>{progress}% · {stepText}</p></div>}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -699,23 +755,23 @@ export default function Home() {
 
             <div style={{ flex: isMobile ? "auto" : "0 0 42%", overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 180px)" }}>
               {activeStudent.essayDetail ? <>
-                <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}><button onClick={copyAllDetail} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📋 复制全部</button><button onClick={generateParentNotice} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📱 家长通知</button></div>
-                <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: RED }}>✏️ 逐段批注</h3>{(activeStudent.essayDetail.corrections || []).map((c: any, i: number) => (<div key={i} style={{ background: "#fff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #eee" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}><div style={{ flex: 1 }}><span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: c.type === "praise" ? GREEN : RED, color: "#fff" }}>{c.paragraph}{c.type === "praise" ? " 👍" : ""}</span><p style={{ fontSize: 13, margin: "4px 0 0", color: "#444" }}>{c.text}</p></div><button onClick={() => copyOneCorrection(c)} style={cpBtnS} title="复制批注">📋</button></div>{c.suggested && c.type !== "praise" && <div style={{ marginTop: 4, padding: "4px 10px", borderRadius: 5, background: "#edf9f1", borderLeft: "3px solid " + GREEN, fontSize: 13, color: GREEN, display: "flex", justifyContent: "space-between", alignItems: "center" }}>→ {c.suggested}<button onClick={() => copyOneSuggested(c)} style={{ ...cpBtnS, color: GREEN }} title="复制建议">📋</button></div>}</div>))}</div>
-                {activeStudent.essayDetail.model_suggestions?.length > 0 && <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: "#2980b9" }}>📄 范文对比修改建议</h3>{activeStudent.essayDetail.model_suggestions.map((s: any, i: number) => (<div key={i} style={{ background: "#f0f8ff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #b8d8f0" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}><span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "#2980b9", color: "#fff" }}>{s.paragraph}</span><button onClick={() => copyModelSuggestion(s)} style={cpBtnS} title="复制">📋</button></div><p style={{ fontSize: 12, margin: "6px 0 2px", color: "#888" }}>学生原句：<span style={{ color: "#555" }}>{s.student_text}</span></p><p style={{ fontSize: 12, margin: "2px 0", color: "#888" }}>范文参考：<span style={{ color: "#2980b9", fontWeight: 600 }}>{s.model_text}</span></p><p style={{ fontSize: 13, margin: "4px 0 0", color: "#444", lineHeight: 1.7 }}>💡 {s.suggestion}</p></div>))}</div>}
-                {activeStudent.essayDetail.good_phrases?.length > 0 && <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: RED }}>⭕ 好词好句</h3><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{activeStudent.essayDetail.good_phrases.map((g: any, i: number) => (<span key={i} style={{ padding: "4px 12px", borderRadius: 20, background: g.type === "word" ? "#fef2f2" : "#fff8ed", border: "1px solid " + (g.type === "word" ? "#f0c0c0" : "#f0e0c0"), fontSize: 13, color: "#555" }}>{g.type === "word" ? "📍" : "〰️"} {g.phrase} <span style={{ fontSize: 11, color: "#999" }}>{g.paragraph}</span></span>))}</div></div>}
-                <div style={{ marginBottom: 16 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}><h3 style={{ fontSize: 16, fontWeight: 700, color: GREEN, margin: 0 }}>🌟 三大亮点</h3><button onClick={copyAllHighlights} style={cpBtnS}>📋</button></div>{(activeStudent.essayDetail.highlights || []).map((h: any, i: number) => (<div key={i} style={{ background: "#edf9f1", borderRadius: 8, padding: 14, marginBottom: 8, borderLeft: "3px solid " + GREEN }}><p style={{ fontWeight: 700, fontSize: 14, color: GREEN, marginBottom: 4 }}>{(i + 1) + ". " + h.title}</p><p style={{ fontSize: 13, lineHeight: 1.8, margin: 0, color: "#444" }}>{h.description}</p></div>))}</div>
-                {activeStudent.essayDetail.special_req_feedback && <div style={{ background: "#fff0f6", borderRadius: 8, padding: 16, border: "1px solid #f0c0d8", marginBottom: 16 }}><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: "#c0392b" }}>📝 本次特殊要求反馈</h3><p style={{ fontSize: 13, lineHeight: 1.8, margin: 0, color: "#555" }}>{activeStudent.essayDetail.special_req_feedback}</p></div>}
-                {activeStudent.essayDetail.teacher_comment && <div style={{ background: "#fff8ed", borderRadius: 8, padding: 16, border: "1px solid #f0e0c0", marginBottom: 16, position: "relative" }}><button onClick={copyTeacherComment} style={{ ...cpBtnS, position: "absolute", top: 12, right: 12 }}>📋</button><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>💬 教师总评</h3><p style={{ fontSize: 14, lineHeight: 2, margin: 0, color: "#555" }}>{activeStudent.essayDetail.teacher_comment}</p></div>}
-                {activeStudent.essayDetail.improvement_tips?.length > 0 && <div style={{ background: "#f0f4ff", borderRadius: 8, padding: 16, border: "1px solid #d0d8f0", position: "relative" }}><button onClick={copyAllTips} style={{ ...cpBtnS, position: "absolute", top: 12, right: 12 }}>📋</button><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: PRIMARY }}>📝 改进方向</h3>{activeStudent.essayDetail.improvement_tips.map((tip: string, i: number) => (<p key={i} style={{ fontSize: 13, lineHeight: 1.8, margin: "0 0 6px", color: "#444" }}>{tip}</p>))}</div>}
+                <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}><button onClick={copyAllDetail} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>复制全部</button><button onClick={generateParentNotice} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>家长通知</button></div>
+                <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: RED }}>逐段批注</h3>{(activeStudent.essayDetail.corrections || []).map((c: any, i: number) => (<div key={i} style={{ background: "#fff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #eee" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}><div style={{ flex: 1 }}><span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: c.type === "praise" ? GREEN : RED, color: "#fff" }}>{c.paragraph}{c.type === "praise" ? " +" : ""}</span><p style={{ fontSize: 13, margin: "4px 0 0", color: "#444" }}>{c.text}</p></div><button onClick={() => copyOneCorrection(c)} style={cpBtnS} title="复制批注">复制</button></div>{c.suggested && c.type !== "praise" && <div style={{ marginTop: 4, padding: "4px 10px", borderRadius: 5, background: "#edf9f1", borderLeft: "3px solid " + GREEN, fontSize: 13, color: GREEN, display: "flex", justifyContent: "space-between", alignItems: "center" }}>→ {c.suggested}<button onClick={() => copyOneSuggested(c)} style={{ ...cpBtnS, color: GREEN }} title="复制建议">复制</button></div>}</div>))}</div>
+                {activeStudent.essayDetail.model_suggestions?.length > 0 && <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: "#2980b9" }}>范文对比修改建议</h3>{activeStudent.essayDetail.model_suggestions.map((s: any, i: number) => (<div key={i} style={{ background: "#f0f8ff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #b8d8f0" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}><span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "#2980b9", color: "#fff" }}>{s.paragraph}</span><button onClick={() => copyModelSuggestion(s)} style={cpBtnS} title="复制">复制</button></div><p style={{ fontSize: 12, margin: "6px 0 2px", color: "#888" }}>学生原句：<span style={{ color: "#555" }}>{s.student_text}</span></p><p style={{ fontSize: 12, margin: "2px 0", color: "#888" }}>范文参考：<span style={{ color: "#2980b9", fontWeight: 600 }}>{s.model_text}</span></p><p style={{ fontSize: 13, margin: "4px 0 0", color: "#444", lineHeight: 1.7 }}>{s.suggestion}</p></div>))}</div>}
+                {activeStudent.essayDetail.good_phrases?.length > 0 && <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: RED }}>好词好句</h3><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{activeStudent.essayDetail.good_phrases.map((g: any, i: number) => (<span key={i} style={{ padding: "4px 12px", borderRadius: 20, background: g.type === "word" ? "#fef2f2" : "#fff8ed", border: "1px solid " + (g.type === "word" ? "#f0c0c0" : "#f0e0c0"), fontSize: 13, color: "#555" }}>{g.phrase} <span style={{ fontSize: 11, color: "#999" }}>{g.paragraph}</span></span>))}</div></div>}
+                <div style={{ marginBottom: 16 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}><h3 style={{ fontSize: 16, fontWeight: 700, color: GREEN, margin: 0 }}>三大亮点</h3><button onClick={copyAllHighlights} style={cpBtnS}>复制</button></div>{(activeStudent.essayDetail.highlights || []).map((h: any, i: number) => (<div key={i} style={{ background: "#edf9f1", borderRadius: 8, padding: 14, marginBottom: 8, borderLeft: "3px solid " + GREEN }}><p style={{ fontWeight: 700, fontSize: 14, color: GREEN, marginBottom: 4 }}>{(i + 1) + ". " + h.title}</p><p style={{ fontSize: 13, lineHeight: 1.8, margin: 0, color: "#444" }}>{h.description}</p></div>))}</div>
+                {activeStudent.essayDetail.special_req_feedback && <div style={{ background: "#fff0f6", borderRadius: 8, padding: 16, border: "1px solid #f0c0d8", marginBottom: 16 }}><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: "#b5453a" }}>特殊要求反馈</h3><p style={{ fontSize: 13, lineHeight: 1.8, margin: 0, color: "#555" }}>{activeStudent.essayDetail.special_req_feedback}</p></div>}
+                {activeStudent.essayDetail.teacher_comment && <div style={{ background: "#fff8ed", borderRadius: 8, padding: 16, border: "1px solid #f0e0c0", marginBottom: 16, position: "relative" }}><button onClick={copyTeacherComment} style={{ ...cpBtnS, position: "absolute", top: 12, right: 12 }}>复制</button><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>教师总评</h3><p style={{ fontSize: 14, lineHeight: 2, margin: 0, color: "#555" }}>{activeStudent.essayDetail.teacher_comment}</p></div>}
+                {activeStudent.essayDetail.improvement_tips?.length > 0 && <div style={{ background: "#f0f4ff", borderRadius: 8, padding: 16, border: "1px solid #d0d8f0", position: "relative" }}><button onClick={copyAllTips} style={{ ...cpBtnS, position: "absolute", top: 12, right: 12 }}>复制</button><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: PRIMARY }}>改进方向</h3>{activeStudent.essayDetail.improvement_tips.map((tip: string, i: number) => (<p key={i} style={{ fontSize: 13, lineHeight: 1.8, margin: "0 0 6px", color: "#444" }}>{tip}</p>))}</div>}
               </> : <p style={{ color: "#bbb", textAlign: "center", paddingTop: 40 }}>请先批改后查看</p>}
             </div>
           </div>}
         </div>}
 
         {tab === "archive" && <div>
-          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#555" }}>📦 储存箱 <span style={{ fontSize: 13, fontWeight: 400, color: "#999" }}>（已归档的批改记录）</span></h3>
+          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#555" }}>储存箱 <span style={{ fontSize: 13, fontWeight: 400, color: "#999" }}>（已归档的批改记录）</span></h3>
           {students.filter(s => s.archived).length === 0 ? (
-            <div style={{ textAlign: "center", padding: "60px 0", color: "#bbb" }}><p style={{ fontSize: 36 }}>📦</p><p>储存箱是空的</p><p style={{ fontSize: 13 }}>批改完成的学生可以在列表里点 📦 归档到这里</p></div>
+            <div style={{ textAlign: "center", padding: "60px 0", color: "#bbb" }}><p style={{ fontSize: 36 }}>—</p><p>储存箱是空的</p><p style={{ fontSize: 13 }}>批改完成的学生可以在列表里归档到这里</p></div>
           ) : (
             <div>
               {Array.from(new Set(students.filter(s => s.archived).map(s => s.className || "默认班"))).map(cn => {

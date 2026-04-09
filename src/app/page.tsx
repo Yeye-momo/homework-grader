@@ -158,6 +158,7 @@ export default function Home() {
         if (d.modelText) setModelText(d.modelText);
         if (d.classNames?.length) setClassNames(d.classNames);
         if (d.currentClass) setCurrentClass(d.currentClass);
+        if (d.tab) setTab(d.tab);
         const apiSettings = JSON.parse(localStorage.getItem("hw_api_settings") || "{}");
         if (apiSettings.apiKey) setCustomApiKey(apiSettings.apiKey);
         if (apiSettings.epPro) setCustomEpPro(apiSettings.epPro);
@@ -191,11 +192,11 @@ export default function Home() {
       const data = {
         students: students.map(s => ({ ...s, images: [], imageUrls: [], imageCount: s.imageUrls.length })),
         activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText,
-        modelImageCount: modelImageUrls.length, classNames, currentClass,
+        modelImageCount: modelImageUrls.length, classNames, currentClass, tab,
       };
       localStorage.setItem("hw_grader_v8", JSON.stringify(data));
     } catch {}
-  }, [students, activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText, modelImageUrls, classNames, currentClass, initDone]);
+  }, [students, activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText, modelImageUrls, classNames, currentClass, tab, initDone]);
 
   function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
     const out: string[] = [];
@@ -763,15 +764,16 @@ export default function Home() {
                     <button onClick={undo} title="撤销" style={{ width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer", background: "transparent", fontSize: 16, flexShrink: 0 }}>↩</button>
                     <button onClick={redo} title="重做" style={{ width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer", background: "transparent", fontSize: 16, flexShrink: 0 }}>↪</button>
                     <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
-                    {[RED, ORANGE, "#2980b9", GREEN, "#333"].map(c => (<div key={c} onClick={() => setStrokeColor(c)} style={{ width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer", border: strokeColor === c ? "3px solid #333" : "2px solid #E0E0DC", flexShrink: 0 }} />))}
+                    {[RED, "#2980b9", "#333"].map(c => (<div key={c} onClick={() => setStrokeColor(c)} style={{ width: 22, height: 22, borderRadius: "50%", background: c, cursor: "pointer", border: strokeColor === c ? "3px solid #333" : "2px solid #E0E0DC", flexShrink: 0 }} />))}
                     <input type="color" value={strokeColor} onChange={e => setStrokeColor(e.target.value)} title="自定义颜色" style={{ width: 22, height: 22, border: "none", padding: 0, cursor: "pointer", borderRadius: 4, flexShrink: 0 }} />
                     <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
                     <input type="number" min={8} max={72} value={fontSize} onChange={e => { const v = Number(e.target.value); if (v >= 8 && v <= 72) { setFontSize(v); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], fontSize: v }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } } }} style={{ width: 44, padding: "4px 2px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, textAlign: "center", outline: "none", flexShrink: 0 }} title="字号" />
                     <div style={{ position: "relative", flexShrink: 0 }} onMouseEnter={() => setShowAlignMenu(true)} onMouseLeave={() => setShowAlignMenu(false)}>
-                      <button title="文字对齐" style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: showAlignMenu ? PRIMARY_LIGHT : "#fff", color: showAlignMenu ? PRIMARY : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <button title="文字对齐" style={{ width: 36, height: 36, borderRadius: 8, border: showAlignMenu ? "1px solid " + PRIMARY : "1px solid #E0E0DC", cursor: "pointer", background: showAlignMenu ? PRIMARY_LIGHT : "#fff", color: showAlignMenu ? PRIMARY : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" }}>
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">{textAlign === "left" ? <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="14" height="2" rx="1" fill="currentColor"/></> : textAlign === "center" ? <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="3" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="14" height="2" rx="1" fill="currentColor"/></> : textAlign === "right" ? <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="6" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="2" y="11" width="14" height="2" rx="1" fill="currentColor"/></> : <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="16" height="2" rx="1" fill="currentColor"/></>}</svg>
                       </button>
-                      {showAlignMenu && <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: 2, background: "#fff", borderRadius: 8, border: "1px solid #E0E0DC", boxShadow: "0 4px 16px rgba(0,0,0,0.1)", padding: 4, display: "flex", gap: 2, zIndex: 50 }}>
+                      {showAlignMenu && <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", paddingTop: 4, zIndex: 50 }}>
+                        <div style={{ background: "#fff", borderRadius: 8, border: "1px solid #E0E0DC", boxShadow: "0 4px 16px rgba(0,0,0,0.1)", padding: 4, display: "flex", gap: 2 }}>
                         {([["left", <>
                           <rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="14" height="2" rx="1" fill="currentColor"/>
                         </>], ["center", <>
@@ -781,10 +783,11 @@ export default function Home() {
                         </>], ["justify", <>
                           <rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="16" height="2" rx="1" fill="currentColor"/>
                         </>]] as [typeof textAlign, React.ReactNode][]).map(([al, icon]) => (
-                          <button key={al} onMouseDown={e => { e.preventDefault(); setTextAlign(al); setShowAlignMenu(false); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], textAlign: al }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } }} style={{ width: 32, height: 32, borderRadius: 6, border: "none", cursor: "pointer", background: textAlign === al ? PRIMARY_LIGHT : "transparent", color: textAlign === al ? PRIMARY : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <button key={al} onMouseDown={e => { e.preventDefault(); setTextAlign(al); setShowAlignMenu(false); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], textAlign: al }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } }} style={{ width: 34, height: 34, borderRadius: 6, border: "none", cursor: "pointer", background: textAlign === al ? PRIMARY_LIGHT : "transparent", color: textAlign === al ? PRIMARY : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">{icon}</svg>
                           </button>
                         ))}
+                        </div>
                       </div>}
                     </div>
                     <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />

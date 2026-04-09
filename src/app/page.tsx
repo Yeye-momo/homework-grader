@@ -763,7 +763,7 @@ export default function Home() {
           </div>}
           {activeStudent && activeStudent.status === "error" && <div style={{ textAlign: "center", padding: "80px 20px" }}>
             <p style={{ fontSize: 16, fontWeight: 600, color: RED, marginBottom: 8 }}>{activeStudent.name} 批改出错</p>
-            <p style={{ fontSize: 13, color: "#D1D5DB" }}>{activeStudent.errorMsg || "请在"上传作业"页面重试"}</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB" }}>{activeStudent.errorMsg || "请在「上传作业」页面重试"}</p>
           </div>}
           {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
             {/* LEFT: Canvas */}

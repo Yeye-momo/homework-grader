@@ -111,6 +111,7 @@ export default function Home() {
   const [customApiKey, setCustomApiKey] = useState("");
   const [customEpPro, setCustomEpPro] = useState("");
   const [customEpFast, setCustomEpFast] = useState("");
+  const [layoutWidth, setLayoutWidth] = useState(() => { try { const v = Number(localStorage.getItem("hw_layout_w")); return v >= 800 && v <= 10000 ? v : 0; } catch { return 0; } });
   const [splitPct, setSplitPct] = useState(() => { try { const v = Number(localStorage.getItem("hw_split_pct")); return v >= 25 && v <= 75 ? v : 55; } catch { return 55; } });
   const splitDrag = useRef(false);
 
@@ -391,11 +392,13 @@ export default function Home() {
   } window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); });
 
   useEffect(() => {
-    const onMove = (e: MouseEvent) => { if (!splitDrag.current) return; e.preventDefault(); const c = document.getElementById("detail-split"); if (!c) return; const r = c.getBoundingClientRect(); const p = ((e.clientX - r.left) / r.width) * 100; const clamped = Math.max(25, Math.min(75, p)); setSplitPct(clamped); };
-    const onUp = () => { if (splitDrag.current) { splitDrag.current = false; document.body.style.cursor = ""; document.body.style.userSelect = ""; try { localStorage.setItem("hw_split_pct", String(splitPct)); } catch {} } };
+    const onMove = (e: MouseEvent) => { if (!splitDrag.current) return; e.preventDefault(); const c = document.getElementById("detail-split"); if (!c) return; const r = c.getBoundingClientRect(); const p = ((e.clientX - r.left) / r.width) * 100; setSplitPct(Math.max(25, Math.min(75, Math.round(p)))); };
+    const onUp = () => { if (splitDrag.current) { splitDrag.current = false; document.body.style.cursor = ""; document.body.style.userSelect = ""; } };
     window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
   });
+  useEffect(() => { try { localStorage.setItem("hw_split_pct", String(splitPct)); } catch {} }, [splitPct]);
+  useEffect(() => { try { localStorage.setItem("hw_layout_w", String(layoutWidth)); } catch {} }, [layoutWidth]);
 
   // Global full-screen drag overlay
   useEffect(() => {
@@ -646,7 +649,14 @@ export default function Home() {
       </div>}
       {batchStatus && <div style={{ background: "#F0F7F2", padding: "10px 32px", fontSize: 14, fontWeight: 600, color: GREEN, borderBottom: "1px solid #D4E5D9" }}>{batchStatus}</div>}
 
-      <div style={{ margin: "0 auto", padding: "8px 20px" }}>
+      <div style={{ maxWidth: layoutWidth > 0 ? layoutWidth : "none", margin: "0 auto", padding: "8px 20px", transition: "max-width 0.2s" }}>
+        {/* Layout width control - bottom right corner */}
+        {!isMobile && <div style={{ position: "fixed", bottom: 12, right: 12, zIndex: 999, display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 8, boxShadow: "0 1px 6px rgba(0,0,0,0.08)", border: "1px solid #E8E8E4", fontSize: 11, color: "#9CA3AF", backdropFilter: "blur(6px)" }}>
+          <span style={{ whiteSpace: "nowrap" }}>宽度</span>
+          <input type="range" min={800} max={Math.max(2400, typeof window !== "undefined" ? window.innerWidth : 2400)} step={50} value={layoutWidth > 0 ? layoutWidth : (typeof window !== "undefined" ? window.innerWidth : 1920)} onChange={e => setLayoutWidth(Number(e.target.value))} style={{ width: 80, height: 12, cursor: "pointer", accentColor: PRIMARY }} />
+          <span style={{ minWidth: 32, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{layoutWidth > 0 ? layoutWidth : "满"}</span>
+          {layoutWidth > 0 && <button onClick={() => setLayoutWidth(0)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#D1D5DB", fontSize: 12, padding: "0 2px" }} title="重置为铺满">✕</button>}
+        </div>}
         {tab !== "detail" && <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 10 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>}
 
         {tab === "upload" && (
@@ -833,7 +843,7 @@ export default function Home() {
             </div>
 
             {/* Draggable splitter */}
-            {!isMobile && <div onMouseDown={e => { e.preventDefault(); splitDrag.current = true; document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none"; }} style={{ width: 6, flexShrink: 0, cursor: "col-resize", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}><div style={{ width: 3, height: 40, borderRadius: 2, background: "#D1D5DB", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = PRIMARY)} onMouseLeave={e => (e.currentTarget.style.background = "#D1D5DB")} /></div>}
+            {!isMobile && <div onMouseDown={e => { e.preventDefault(); splitDrag.current = true; document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none"; }} style={{ width: 8, flexShrink: 0, cursor: "col-resize", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ width: 3, height: 36, borderRadius: 2, background: "#D1D5DB", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = PRIMARY)} onMouseLeave={e => (e.currentTarget.style.background = "#D1D5DB")} /></div>}
 
             {/* MIDDLE: Detail panel */}
             <div style={{ flex: 1, minWidth: 0, overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 100px)", padding: "0 12px" }}>

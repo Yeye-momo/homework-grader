@@ -103,6 +103,7 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const [customApiKey, setCustomApiKey] = useState("");
   const [customEpPro, setCustomEpPro] = useState("");
   const [customEpFast, setCustomEpFast] = useState("");
@@ -328,7 +329,7 @@ export default function Home() {
   }
   function erasePenAt(cx: number, cy: number) { const R = 10; const acts = actionMap[pk] || []; const newActs = [...acts]; let changed = false; for (let i = newActs.length - 1; i >= 0; i--) { const a = newActs[i]; if (a.type === "pen" && a.points) { const remaining = a.points.filter(p => Math.abs(p.x - cx) > R || Math.abs(p.y - cy) > R); if (remaining.length !== a.points.length) { changed = true; if (remaining.length < 2) newActs.splice(i, 1); else newActs[i] = { ...a, points: remaining }; } } } if (changed) setActionMap(pr => ({ ...pr, [pk]: newActs })); }
   function hitTest(acts: DrawAction[], cx: number, cy: number) { const R = 20; const cv = canvasRef.current; const ctx = cv?.getContext("2d"); for (let i = acts.length - 1; i >= 0; i--) { const a = acts[i]; if (a.type === "pen" && a.points) { for (const p of a.points) if (Math.abs(p.x - cx) < R && Math.abs(p.y - cy) < R) return i; } else if (a.type === "circle" && a.x != null && a.w != null && a.y != null && a.h != null) { if (Math.abs(a.x + a.w / 2 - cx) < Math.abs(a.w) / 2 + R && Math.abs(a.y + a.h / 2 - cy) < Math.abs(a.h) / 2 + R) return i; } else if (a.type === "text" && a.x != null && a.y != null) { const fs = a.fontSize || 18; const lines = (a.text || "").split("\n"); let tw = a.w || 60; if (ctx) { ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; tw = a.w || Math.max(...lines.map(l => ctx.measureText(l).width), 30); } if (cx > a.x - R && cx < a.x + tw + R && cy > a.y - 10 && cy < a.y + lines.length * fs * 1.4 + 10) return i; } else if (a.type === "wavy" && a.x != null && a.endX != null && a.y != null) { if (cx > Math.min(a.x, a.endX) - R && cx < Math.max(a.x, a.endX) + R && Math.abs(cy - a.y) < R) return i; } } return -1; }
-  function hitTestText(acts: DrawAction[], cx: number, cy: number) { const cv = canvasRef.current; const ctx = cv?.getContext("2d"); for (let i = acts.length - 1; i >= 0; i--) { const a = acts[i]; if (a.type === "text" && a.x != null && a.y != null) { const fs = a.fontSize || 18; const lines = (a.text || "").split("\n"); let tw = a.w || 60; if (ctx) { ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; tw = a.w || Math.max(...lines.map(l => ctx.measureText(l).width), 30); } if (cx > a.x - 5 && cx < a.x + tw + 5 && cy > a.y - 5 && cy < a.y + lines.length * fs * 1.4 + 5) return i; } } return -1; }
+  function hitTestText(acts: DrawAction[], cx: number, cy: number) { for (let i = acts.length - 1; i >= 0; i--) { const a = acts[i]; if (a.type === "text" && a.x != null && a.y != null) { const b = getActionBounds(a); if (b && cx > b.x - 10 && cx < b.x + b.w + 10 && cy > b.y - 10 && cy < b.y + b.h + 10) return i; } } return -1; }
 
   function exportOnePNG(studentId: string, pIdx: number): Promise<Blob | null> {
     return new Promise((resolve) => {
@@ -588,9 +589,12 @@ export default function Home() {
               <p style={{ fontSize: 10, color: "#D1D5DB", marginTop: 8, textAlign: "center", lineHeight: 1.5 }}>API Key 仅保存在浏览器本地，不会上传至服务器</p>
             </div>}
 
-            {/* Tutorial */}
-            <div style={{ marginTop: 20, padding: "16px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#FAFAF8" }}>
-              <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: "#374151" }}>使用教程</p>
+            {/* Tutorial - collapsible */}
+            <div onClick={() => setShowTutorial(!showTutorial)} style={{ marginTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: 10, border: "1px solid #E8E8E4", cursor: "pointer", background: showTutorial ? "#FAFAF8" : "#fff", transition: "all 0.2s" }}>
+              <div><p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#374151" }}>使用教程</p><p style={{ margin: "2px 0 0", fontSize: 11, color: "#9CA3AF" }}>操作说明与快捷键</p></div>
+              <span style={{ fontSize: 12, color: "#9CA3AF", transform: showTutorial ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▼</span>
+            </div>
+            {showTutorial && <div style={{ marginTop: 8, padding: "16px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#FAFAF8" }}>
               <div style={{ fontSize: 12, lineHeight: 2, color: "#6B7280" }}>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>1. 添加学生：</strong>在"上传作业"页输入姓名，点添加。可建多个班级管理。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>2. 上传照片：</strong>选中学生后，点击或拖拽照片到上传区。支持多页作文。</p>
@@ -599,10 +603,10 @@ export default function Home() {
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>5. 快捷批语：</strong>点击"好词""错字"等标签后，在图上点击放置。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>6. 修改文字：</strong>双击已有文字可编辑，修改字号后点击空白处保存。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>7. 删除批注：</strong>鼠标靠近批注出现虚线框，按 Backspace/Delete 删除。</p>
-                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>8. 导出：</strong>点"导出"下载当前页批注图片，点"复制"可直接粘贴到微信。</p>
-                <p style={{ margin: 0 }}><strong style={{ color: "#374151" }}>9. 快捷键：</strong>数字键 1-7 切换工具，Ctrl+Z 撤销，Ctrl+Y 重做，Esc 取消。</p>
+                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>8. 导出：</strong>点"导出"下载批注图片，点"复制"可直接粘贴到微信。</p>
+                <p style={{ margin: 0 }}><strong style={{ color: "#374151" }}>9. 快捷键：</strong>1-7 切换工具，Ctrl+Z 撤销，Ctrl+Y 重做，Esc 取消。</p>
               </div>
-            </div>
+            </div>}
           </div>
           <div style={{ padding: "16px 28px 24px", borderTop: "1px solid #E8E8E4", textAlign: "center" }}><p style={{ margin: 0, fontSize: 11, color: "#D1D5DB" }}>Made for teachers · Powered by AI</p></div>
         </div>
@@ -746,24 +750,24 @@ export default function Home() {
                     {[RED, ORANGE, "#2980b9", GREEN, "#333"].map(c => (<div key={c} onClick={() => setStrokeColor(c)} style={{ width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer", border: strokeColor === c ? "3px solid #333" : "2px solid #E0E0DC", flexShrink: 0 }} />))}
                     <input type="color" value={strokeColor} onChange={e => setStrokeColor(e.target.value)} title="自定义颜色" style={{ width: 22, height: 22, border: "none", padding: 0, cursor: "pointer", borderRadius: 4, flexShrink: 0 }} />
                     <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
-                    <input type="number" min={8} max={72} value={fontSize} onChange={e => { const v = Number(e.target.value); if (v >= 8 && v <= 72) setFontSize(v); }} style={{ width: 44, padding: "4px 4px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, textAlign: "center", outline: "none", flexShrink: 0 }} title="字号" />
+                    <input type="number" min={8} max={72} value={fontSize} onChange={e => { const v = Number(e.target.value); if (v >= 8 && v <= 72) { setFontSize(v); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], fontSize: v }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } } }} style={{ width: 44, padding: "4px 4px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, textAlign: "center", outline: "none", flexShrink: 0 }} title="字号" />
                     <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
                     <button onClick={exportPNG} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>导出</button>
                     <button onClick={copyImageToClipboard} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>复制</button>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "3px 8px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", flexWrap: "nowrap", overflowX: "auto" }}>
-                    {QUICK_STAMPS.map((s, i) => (<button key={i} onClick={() => { setPendingStamp(s); setStrokeColor(s.color); setMovingIdx(-1); }} style={{ padding: "2px 7px", borderRadius: 5, border: pendingStamp?.label === s.label ? "2px solid " + s.color : "1px solid #E8E8E4", background: pendingStamp?.label === s.label ? s.color + "15" : "#fff", color: s.color, fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>{s.label}</button>))}
-                    {pendingStamp && <span style={{ fontSize: 10, color: "#9CA3AF", marginLeft: 2, flexShrink: 0 }}>← 放置</span>}
-                    <div style={{ width: 1, height: 16, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
-                    <button onClick={() => setPad(0, v => v + 120)} style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>+上</button>
-                    {padTop > 0 && <button onClick={() => setPad(0, v => Math.max(0, v - 120))} style={{ padding: "2px 4px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED, flexShrink: 0 }}>−</button>}
-                    <button onClick={() => setPad(1, v => v + 120)} style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>+下</button>
-                    {padBot > 0 && <button onClick={() => setPad(1, v => Math.max(0, v - 120))} style={{ padding: "2px 4px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED, flexShrink: 0 }}>−</button>}
-                    <button onClick={() => setPad(2, v => v + 120)} style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>+左</button>
-                    {padLeft > 0 && <button onClick={() => setPad(2, v => Math.max(0, v - 120))} style={{ padding: "2px 4px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED, flexShrink: 0 }}>−</button>}
-                    <button onClick={() => setPad(3, v => v + 120)} style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>+右</button>
-                    {padRight > 0 && <button onClick={() => setPad(3, v => Math.max(0, v - 120))} style={{ padding: "2px 4px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED, flexShrink: 0 }}>−</button>}
-                    {(padTop > 0 || padBot > 0 || padLeft > 0 || padRight > 0) && <button onClick={resetPad} style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED, flexShrink: 0 }}>重置</button>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "3px 6px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", flexWrap: "wrap" }}>
+                    {QUICK_STAMPS.map((s, i) => (<button key={i} onClick={() => { setPendingStamp(s); setStrokeColor(s.color); setMovingIdx(-1); }} style={{ padding: "2px 6px", borderRadius: 4, border: pendingStamp?.label === s.label ? "2px solid " + s.color : "1px solid #E8E8E4", background: pendingStamp?.label === s.label ? s.color + "15" : "#fff", color: s.color, fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>{s.label}</button>))}
+                    {pendingStamp && <span style={{ fontSize: 10, color: "#9CA3AF" }}>← 放置</span>}
+                    <div style={{ width: 1, height: 14, background: "#E0E0DC", margin: "0 2px" }} />
+                    <button onClick={() => setPad(0, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF" }}>+上</button>
+                    {padTop > 0 && <button onClick={() => setPad(0, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED }}>−</button>}
+                    <button onClick={() => setPad(1, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF" }}>+下</button>
+                    {padBot > 0 && <button onClick={() => setPad(1, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED }}>−</button>}
+                    <button onClick={() => setPad(2, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF" }}>+左</button>
+                    {padLeft > 0 && <button onClick={() => setPad(2, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED }}>−</button>}
+                    <button onClick={() => setPad(3, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF" }}>+右</button>
+                    {padRight > 0 && <button onClick={() => setPad(3, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED }}>−</button>}
+                    {(padTop > 0 || padBot > 0 || padLeft > 0 || padRight > 0) && <button onClick={resetPad} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED }}>重置</button>}
                   </div>
                 </div>
                 {/* Canvas content */}

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 type TabName = "upload" | "detail" | "archive";
 type Tool = "pen" | "text" | "circle" | "wavy" | "eraser" | "hand" | "penEraser";
 interface Student { id: string; name: string; className: string; images: File[]; imageUrls: string[]; ocrText: string; essayDetail: any | null; report: string; status: "idle" | "grading" | "done" | "error"; errorMsg?: string; archived?: boolean; }
-interface DrawAction { type: "pen" | "text" | "circle" | "wavy"; color: string; lineWidth: number; points?: { x: number; y: number }[]; x?: number; y?: number; w?: number; h?: number; endX?: number; text?: string; fontSize?: number; }
+interface DrawAction { type: "pen" | "text" | "circle" | "wavy"; color: string; lineWidth: number; points?: { x: number; y: number }[]; x?: number; y?: number; w?: number; h?: number; endX?: number; text?: string; fontSize?: number; textAlign?: "left" | "center" | "right" | "justify"; }
 
 const PRIMARY = "#2D4A3E", PRIMARY_LIGHT = "#E8EEEB", PRIMARY_MID = "#C2D1CA", RED = "#9B4D46", GREEN = "#5A8A6A", ORANGE = "#B8865C", BG = "#FAFAF8";
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -80,6 +80,9 @@ export default function Home() {
   const [strokeColor, setStrokeColor] = useState(RED);
   const [penWidth] = useState(2);
   const [fontSize, setFontSize] = useState(14);
+  const [textAlign, setTextAlign] = useState<"left" | "center" | "right" | "justify">("justify");
+  const [showAlignMenu, setShowAlignMenu] = useState(false);
+  const [toolbarExpanded, setToolbarExpanded] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState({ x: 0, y: 0 });
   const [curPoints, setCurPoints] = useState<{ x: number; y: number }[]>([]);
@@ -218,9 +221,20 @@ export default function Home() {
         const fs = a.fontSize || 18; ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; ctx.textBaseline = "top";
         const mw = a.w || (cssW - a.x - 10); const lines = wrapText(ctx, a.text, mw > 20 ? mw : 200);
         const textH = lines.length * fs * 1.4; let maxLineW = 0; for (const l of lines) maxLineW = Math.max(maxLineW, ctx.measureText(l).width);
-        ctx.fillStyle = "rgba(255,255,255,0.82)"; ctx.fillRect(a.x - 2, a.y - 1, maxLineW + 4, textH + 2);
+        const boxW = a.w || maxLineW;
+        ctx.fillStyle = "rgba(255,255,255,0.82)"; ctx.fillRect(a.x - 2, a.y - 1, boxW + 4, textH + 2);
         ctx.fillStyle = a.color;
-        for (let li = 0; li < lines.length; li++) ctx.fillText(lines[li], a.x, a.y + li * (fs * 1.4));
+        const align = a.textAlign || "justify";
+        for (let li = 0; li < lines.length; li++) {
+          const lw = ctx.measureText(lines[li]).width;
+          if (align === "justify" && li < lines.length - 1 && lines[li].length > 1 && boxW > lw + 2) {
+            const chars = lines[li].split(""); const totalGap = boxW - chars.reduce((s, c) => s + ctx.measureText(c).width, 0); const gap = totalGap / (chars.length - 1); let cx = a.x;
+            for (let ci = 0; ci < chars.length; ci++) { ctx.fillText(chars[ci], cx, a.y + li * (fs * 1.4)); cx += ctx.measureText(chars[ci]).width + gap; }
+          } else {
+            const dx = align === "center" ? (boxW - lw) / 2 : align === "right" ? boxW - lw : 0;
+            ctx.fillText(lines[li], a.x + dx, a.y + li * (fs * 1.4));
+          }
+        }
       }
       else if (a.type === "wavy" && a.x != null && a.y != null && a.endX != null) { ctx.beginPath(); let wx = Math.min(a.x, a.endX); const mx = Math.max(a.x, a.endX); ctx.moveTo(wx, a.y); while (wx < mx) { ctx.quadraticCurveTo(wx + 4, a.y - 5, wx + 8, a.y); ctx.quadraticCurveTo(wx + 12, a.y + 5, wx + 16, a.y); wx += 16; } ctx.stroke(); }
     }
@@ -295,7 +309,7 @@ export default function Home() {
     if (textClickTimer.current) { clearTimeout(textClickTimer.current); textClickTimer.current = null; }
     const p = gp(e); const acts = actionMap[pk] || [];
     const hi = hitTestText(acts, p.x, p.y);
-    if (hi >= 0) { const a = acts[hi]; setEditIdx(hi); setTextPos({ x: a.x!, y: a.y! }); setTextVal(a.text || ""); setStrokeColor(a.color); setFontSize(a.fontSize || 18); setTextBoxW(a.w ? a.w + 16 : 220); setTool("text"); setTimeout(() => txtRef.current?.focus(), 30); }
+    if (hi >= 0) { const a = acts[hi]; setEditIdx(hi); setTextPos({ x: a.x!, y: a.y! }); setTextVal(a.text || ""); setStrokeColor(a.color); setFontSize(a.fontSize || 18); setTextAlign(a.textAlign || "justify"); setTextBoxW(a.w ? a.w + 16 : 220); setTool("text"); setTimeout(() => txtRef.current?.focus(), 30); }
   }
   function mMove(e: React.MouseEvent<HTMLCanvasElement>) {
     const p = gp(e); setMousePos(p);
@@ -325,7 +339,7 @@ export default function Home() {
     else if (tool === "penEraser") { saveToHistory(); }
   }
   function commitText() {
-    if (textVal.trim() && textPos) { const ta = txtRef.current; const bw = ta ? ta.offsetWidth - 16 : undefined; const act: DrawAction = { type: "text", color: strokeColor, lineWidth: penWidth, x: textPos.x, y: textPos.y, text: textVal, fontSize, w: bw }; if (editIdx >= 0) replaceAct(editIdx, act); else pushAct(act); }
+    if (textVal.trim() && textPos) { const ta = txtRef.current; const bw = ta ? ta.offsetWidth - 16 : undefined; const act: DrawAction = { type: "text", color: strokeColor, lineWidth: penWidth, x: textPos.x, y: textPos.y, text: textVal, fontSize, w: bw, textAlign }; if (editIdx >= 0) replaceAct(editIdx, act); else pushAct(act); }
     else if (editIdx >= 0 && !textVal.trim()) deleteAct(editIdx);
     setTextPos(null); setTextVal(""); setEditIdx(-1);
   }
@@ -351,7 +365,7 @@ export default function Home() {
           ctx.strokeStyle = a.color; ctx.fillStyle = a.color; ctx.lineWidth = a.lineWidth * scale; ctx.lineCap = "round"; ctx.lineJoin = "round";
           if (a.type === "pen" && a.points && a.points.length > 1) { ctx.beginPath(); ctx.moveTo(a.points[0].x * scale, a.points[0].y * scale); for (let i = 1; i < a.points.length; i++) ctx.lineTo(a.points[i].x * scale, a.points[i].y * scale); ctx.stroke(); }
           else if (a.type === "circle" && a.x != null && a.y != null && a.w != null && a.h != null) { const rx = Math.abs(a.w * scale) / 2, ry = Math.abs(a.h * scale) / 2; if (rx > 0 && ry > 0) { ctx.beginPath(); ctx.ellipse((a.x + a.w / 2) * scale, (a.y + a.h / 2) * scale, rx, ry, 0, 0, Math.PI * 2); ctx.stroke(); } }
-          else if (a.type === "text" && a.x != null && a.y != null && a.text) { const fs = (a.fontSize || 18) * scale; ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; ctx.textBaseline = "top"; const mw = a.w ? a.w * scale : (totalW - a.x * scale - 10); const lines = wrapText(ctx, a.text, mw > 20 ? mw : 200); const textH = lines.length * fs * 1.4; let maxLW = 0; for (const l of lines) maxLW = Math.max(maxLW, ctx.measureText(l).width); ctx.fillStyle = "rgba(255,255,255,0.82)"; ctx.fillRect(a.x * scale - 2, a.y * scale - 1, maxLW + 4, textH + 2); ctx.fillStyle = a.color; for (let li = 0; li < lines.length; li++) ctx.fillText(lines[li], a.x * scale, a.y * scale + li * (fs * 1.4)); }
+          else if (a.type === "text" && a.x != null && a.y != null && a.text) { const fs = (a.fontSize || 18) * scale; ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; ctx.textBaseline = "top"; const mw = a.w ? a.w * scale : (totalW - a.x * scale - 10); const lines = wrapText(ctx, a.text, mw > 20 ? mw : 200); const textH = lines.length * fs * 1.4; let maxLW = 0; for (const l of lines) maxLW = Math.max(maxLW, ctx.measureText(l).width); const boxW = a.w ? a.w * scale : maxLW; ctx.fillStyle = "rgba(255,255,255,0.82)"; ctx.fillRect(a.x * scale - 2, a.y * scale - 1, boxW + 4, textH + 2); ctx.fillStyle = a.color; const align = a.textAlign || "justify"; for (let li = 0; li < lines.length; li++) { const lw = ctx.measureText(lines[li]).width; if (align === "justify" && li < lines.length - 1 && lines[li].length > 1 && boxW > lw + 2) { const chars = lines[li].split(""); const totalGap = boxW - chars.reduce((s2, c) => s2 + ctx.measureText(c).width, 0); const gap = totalGap / (chars.length - 1); let cx = a.x * scale; for (let ci = 0; ci < chars.length; ci++) { ctx.fillText(chars[ci], cx, a.y * scale + li * (fs * 1.4)); cx += ctx.measureText(chars[ci]).width + gap; } } else { const dx = align === "center" ? (boxW - lw) / 2 : align === "right" ? boxW - lw : 0; ctx.fillText(lines[li], a.x * scale + dx, a.y * scale + li * (fs * 1.4)); } } }
           else if (a.type === "wavy" && a.x != null && a.y != null && a.endX != null) { ctx.beginPath(); let wx = Math.min(a.x, a.endX) * scale; const mx = Math.max(a.x, a.endX) * scale; const wy = a.y * scale; ctx.moveTo(wx, wy); const step = 16 * scale; while (wx < mx) { ctx.quadraticCurveTo(wx + step * 0.25, wy - 5 * scale, wx + step * 0.5, wy); ctx.quadraticCurveTo(wx + step * 0.75, wy + 5 * scale, wx + step, wy); wx += step; } ctx.stroke(); }
         }
         m.toBlob(blob => resolve(blob), "image/png");
@@ -752,9 +766,27 @@ export default function Home() {
                     {[RED, ORANGE, "#2980b9", GREEN, "#333"].map(c => (<div key={c} onClick={() => setStrokeColor(c)} style={{ width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer", border: strokeColor === c ? "3px solid #333" : "2px solid #E0E0DC", flexShrink: 0 }} />))}
                     <input type="color" value={strokeColor} onChange={e => setStrokeColor(e.target.value)} title="自定义颜色" style={{ width: 22, height: 22, border: "none", padding: 0, cursor: "pointer", borderRadius: 4, flexShrink: 0 }} />
                     <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
-                    <button onMouseDown={e => { e.preventDefault(); e.stopPropagation(); const v = Math.max(8, fontSize - 2); setFontSize(v); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], fontSize: v }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } }} style={{ width: 30, height: 30, borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 16, fontWeight: 700, color: "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, userSelect: "none" }}>-</button>
-                    <span style={{ fontSize: 13, color: "#374151", fontWeight: 600, minWidth: 24, textAlign: "center", flexShrink: 0, userSelect: "none" }}>{fontSize}</span>
-                    <button onMouseDown={e => { e.preventDefault(); e.stopPropagation(); const v = Math.min(72, fontSize + 2); setFontSize(v); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], fontSize: v }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } }} style={{ width: 30, height: 30, borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 16, fontWeight: 700, color: "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, userSelect: "none" }}>+</button>
+                    <input type="number" min={8} max={72} value={fontSize} onChange={e => { const v = Number(e.target.value); if (v >= 8 && v <= 72) { setFontSize(v); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], fontSize: v }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } } }} style={{ width: 44, padding: "4px 2px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, textAlign: "center", outline: "none", flexShrink: 0 }} title="字号" />
+                    <div style={{ position: "relative", flexShrink: 0 }} onMouseEnter={() => setShowAlignMenu(true)} onMouseLeave={() => setShowAlignMenu(false)}>
+                      <button title="文字对齐" style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: showAlignMenu ? PRIMARY_LIGHT : "#fff", color: showAlignMenu ? PRIMARY : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">{textAlign === "left" ? <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="14" height="2" rx="1" fill="currentColor"/></> : textAlign === "center" ? <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="3" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="14" height="2" rx="1" fill="currentColor"/></> : textAlign === "right" ? <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="6" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="2" y="11" width="14" height="2" rx="1" fill="currentColor"/></> : <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="16" height="2" rx="1" fill="currentColor"/></>}</svg>
+                      </button>
+                      {showAlignMenu && <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: 2, background: "#fff", borderRadius: 8, border: "1px solid #E0E0DC", boxShadow: "0 4px 16px rgba(0,0,0,0.1)", padding: 4, display: "flex", gap: 2, zIndex: 50 }}>
+                        {([["left", <>
+                          <rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="14" height="2" rx="1" fill="currentColor"/>
+                        </>], ["center", <>
+                          <rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="3" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="14" height="2" rx="1" fill="currentColor"/>
+                        </>], ["right", <>
+                          <rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="6" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="2" y="11" width="14" height="2" rx="1" fill="currentColor"/>
+                        </>], ["justify", <>
+                          <rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="16" height="2" rx="1" fill="currentColor"/>
+                        </>]] as [typeof textAlign, React.ReactNode][]).map(([al, icon]) => (
+                          <button key={al} onMouseDown={e => { e.preventDefault(); setTextAlign(al); setShowAlignMenu(false); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], textAlign: al }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } }} style={{ width: 32, height: 32, borderRadius: 6, border: "none", cursor: "pointer", background: textAlign === al ? PRIMARY_LIGHT : "transparent", color: textAlign === al ? PRIMARY : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">{icon}</svg>
+                          </button>
+                        ))}
+                      </div>}
+                    </div>
                     <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
                     <button onClick={exportPNG} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>导出</button>
                     <button onClick={copyImageToClipboard} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>复制</button>
@@ -783,7 +815,7 @@ export default function Home() {
                   {padBot > 0 && <div style={{ height: padBot, background: "#fff" }} />}
                   <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, cursor: movingIdx >= 0 ? "grabbing" : pendingStamp ? "copy" : tool === "hand" ? (handDragging ? "grabbing" : "grab") : tool === "text" ? "text" : tool === "eraser" ? "pointer" : tool === "penEraser" ? "crosshair" : "crosshair" }} onMouseDown={mDown} onMouseMove={mMove} onMouseUp={mUp} onDoubleClick={mDblClick} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()} onMouseLeave={() => { if (isDrawing) { setIsDrawing(false); redraw(); } if (handDragging) setHandDragging(false); setHoverIdx(-1); }} />
                   {movingIdx >= 0 && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(45,74,62,0.9)", color: "#fff", padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, zIndex: 30, pointerEvents: "none" }}>移动中 · 单击放置 · Esc取消</div>}
-                  {textPos && <textarea ref={txtRef} value={textVal} onChange={e => setTextVal(e.target.value)} onKeyDown={e => { if (e.key === "Escape") { setTextPos(null); setTextVal(""); setEditIdx(-1); } }} onBlur={() => setTimeout(() => commitText(), 80)} onContextMenu={e => e.stopPropagation()} style={{ position: "absolute", left: textPos.x, top: textPos.y - 4, fontSize, fontWeight: "bold", color: strokeColor, background: "rgba(255,255,255,0.92)", border: "2px solid " + strokeColor, borderRadius: 4, padding: "2px 6px", outline: "none", zIndex: 10, width: textBoxW, minWidth: 80, minHeight: fontSize * 1.4 + 12, lineHeight: 1.4, fontFamily: "'Noto Sans SC','Microsoft YaHei',sans-serif", resize: "both", overflow: "hidden", whiteSpace: "pre-wrap", wordBreak: "break-all", boxSizing: "border-box" }} />}
+                  {textPos && <textarea ref={txtRef} value={textVal} onChange={e => setTextVal(e.target.value)} onKeyDown={e => { if (e.key === "Escape") { setTextPos(null); setTextVal(""); setEditIdx(-1); } }} onBlur={() => setTimeout(() => commitText(), 80)} onContextMenu={e => e.stopPropagation()} style={{ position: "absolute", left: textPos.x, top: textPos.y - 4, fontSize, fontWeight: "bold", color: strokeColor, background: "rgba(255,255,255,0.92)", border: "2px solid " + strokeColor, borderRadius: 4, padding: "2px 6px", outline: "none", zIndex: 10, width: textBoxW, minWidth: 80, minHeight: fontSize * 1.4 + 12, lineHeight: 1.4, fontFamily: "'Noto Sans SC','Microsoft YaHei',sans-serif", resize: "both", overflow: "hidden", whiteSpace: "pre-wrap", wordBreak: "break-all", boxSizing: "border-box", textAlign }} />}
                 </div>}
               </div>
               {activeStudent.imageUrls.length > 1 && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "4px 0" }}><button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>← 上一页</button><span style={{ fontSize: 11, color: "#6B7280" }}>{"第 " + (pageIndex + 1) + " / " + activeStudent.imageUrls.length + " 页"}</span><button disabled={pageIndex >= activeStudent.imageUrls.length - 1} onClick={() => setPageIndex(i => i + 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>下一页 →</button></div>}

@@ -370,6 +370,7 @@ export default function Home() {
     if (e.ctrlKey && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
     if (e.ctrlKey && (e.key === "y" || (e.key === "z" && e.shiftKey))) { e.preventDefault(); redo(); }
     if (e.key === "Escape") { if (movingIdx >= 0) setMovingIdx(-1); if (textPos) { setTextPos(null); setTextVal(""); setEditIdx(-1); } }
+    if ((e.key === "Backspace" || e.key === "Delete") && hoverIdx >= 0 && !textPos && movingIdx < 0) { e.preventDefault(); deleteAct(hoverIdx); setHoverIdx(-1); }
     const toolKeys: Record<string, Tool> = { "1": "pen", "2": "hand", "3": "text", "4": "circle", "5": "wavy", "6": "eraser", "7": "penEraser" };
     if (toolKeys[e.key] && !e.ctrlKey && !e.metaKey) { setTool(toolKeys[e.key]); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }
   } window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); });
@@ -402,7 +403,7 @@ export default function Home() {
   function unarchiveStudent(id: string) { setStudents(prev => prev.map(s => s.id === id ? { ...s, archived: false } : s)); }
   function deleteClass(cn: string) { if (cn === "默认班") return; if (!confirm("确定删除班级「" + cn + "」？该班级下的学生将移至默认班。")) return; setStudents(prev => prev.map(s => s.className === cn ? { ...s, className: "默认班" } : s)); setClassNames(prev => prev.filter(c => c !== cn)); if (currentClass === cn) setCurrentClass("默认班"); }
 
-  function compressImage(file: File, maxWidth = 800, quality = 0.5): Promise<string> {
+  function compressImage(file: File, maxWidth = 1200, quality = 0.75): Promise<string> {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => { const canvas = document.createElement("canvas"); let w = img.width, h = img.height; if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; } canvas.width = w; canvas.height = h; const ctx = canvas.getContext("2d"); if (!ctx) { resolve(URL.createObjectURL(file)); return; } ctx.drawImage(img, 0, 0, w, h); resolve(canvas.toDataURL("image/jpeg", quality)); };
@@ -720,34 +721,33 @@ export default function Home() {
               <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
                 {/* Floating toolbar - top */}
                 <div style={{ position: "sticky", top: 0, zIndex: 20, padding: "4px 6px", display: "flex", flexDirection: "column", gap: 3 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", background: "rgba(255,255,255,0.92)", borderRadius: 8, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", flexWrap: "nowrap", overflowX: "auto" }}>
-                    {toolDefs.map(t => (<button key={t.k} onClick={() => { setTool(t.k); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }} title={t.l} style={{ width: 30, height: 30, borderRadius: 6, border: "none", cursor: "pointer", background: tool === t.k && !pendingStamp ? PRIMARY : "transparent", color: tool === t.k && !pendingStamp ? "#fff" : "#6B7280", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{t.ic}</button>))}
-                    <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
-                    <button onClick={undo} title="撤销" style={{ width: 30, height: 30, borderRadius: 6, border: "none", cursor: "pointer", background: "transparent", fontSize: 14, flexShrink: 0 }}>↩</button>
-                    <button onClick={redo} title="重做" style={{ width: 30, height: 30, borderRadius: 6, border: "none", cursor: "pointer", background: "transparent", fontSize: 14, flexShrink: 0 }}>↪</button>
-                    <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
-                    {[RED, ORANGE, "#2980b9", GREEN, "#333"].map(c => (<div key={c} onClick={() => setStrokeColor(c)} style={{ width: 16, height: 16, borderRadius: "50%", background: c, cursor: "pointer", border: strokeColor === c ? "2px solid #333" : "2px solid #E0E0DC", flexShrink: 0 }} />))}
-                    <input type="color" value={strokeColor} onChange={e => setStrokeColor(e.target.value)} title="自定义颜色" style={{ width: 18, height: 18, border: "none", padding: 0, cursor: "pointer", borderRadius: 3, flexShrink: 0 }} />
-                    <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
-                    <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>{fontSize}</span>
-                    <input type="range" min={8} max={48} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} style={{ width: 50, cursor: "pointer", flexShrink: 0 }} />
-                    <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
-                    <button onClick={exportPNG} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 10, fontWeight: 600, flexShrink: 0 }}>导出</button>
-                    <button onClick={copyImageToClipboard} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 10, fontWeight: 600, flexShrink: 0 }}>复制</button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", flexWrap: "nowrap", overflowX: "auto" }}>
+                    {toolDefs.map(t => (<button key={t.k} onClick={() => { setTool(t.k); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }} title={t.l} style={{ width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer", background: tool === t.k && !pendingStamp ? PRIMARY : "transparent", color: tool === t.k && !pendingStamp ? "#fff" : "#6B7280", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{t.ic}</button>))}
+                    <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
+                    <button onClick={undo} title="撤销" style={{ width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer", background: "transparent", fontSize: 16, flexShrink: 0 }}>↩</button>
+                    <button onClick={redo} title="重做" style={{ width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer", background: "transparent", fontSize: 16, flexShrink: 0 }}>↪</button>
+                    <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
+                    {[RED, ORANGE, "#2980b9", GREEN, "#333"].map(c => (<div key={c} onClick={() => setStrokeColor(c)} style={{ width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer", border: strokeColor === c ? "3px solid #333" : "2px solid #E0E0DC", flexShrink: 0 }} />))}
+                    <input type="color" value={strokeColor} onChange={e => setStrokeColor(e.target.value)} title="自定义颜色" style={{ width: 22, height: 22, border: "none", padding: 0, cursor: "pointer", borderRadius: 4, flexShrink: 0 }} />
+                    <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
+                    <input type="number" min={8} max={72} value={fontSize} onChange={e => { const v = Number(e.target.value); if (v >= 8 && v <= 72) setFontSize(v); }} style={{ width: 44, padding: "4px 4px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, textAlign: "center", outline: "none", flexShrink: 0 }} title="字号" />
+                    <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
+                    <button onClick={exportPNG} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>导出</button>
+                    <button onClick={copyImageToClipboard} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>复制</button>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "3px 8px", background: "rgba(255,255,255,0.92)", borderRadius: 8, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", flexWrap: "wrap" }}>
-                    {QUICK_STAMPS.map((s, i) => (<button key={i} onClick={() => { setPendingStamp(s); setStrokeColor(s.color); setMovingIdx(-1); }} style={{ padding: "1px 6px", borderRadius: 4, border: pendingStamp?.label === s.label ? "2px solid " + s.color : "1px solid #E8E8E4", background: pendingStamp?.label === s.label ? s.color + "15" : "transparent", color: s.color, fontSize: 10, fontWeight: 600, cursor: "pointer" }}>{s.label}</button>))}
-                    {pendingStamp && <span style={{ fontSize: 9, color: "#9CA3AF" }}>← 点击放置</span>}
-                    <div style={{ width: 1, height: 14, background: "#E0E0DC", margin: "0 3px" }} />
-                    <button onClick={() => setPad(0, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "transparent", cursor: "pointer", fontSize: 9, color: "#9CA3AF" }}>+上</button>
-                    {padTop > 0 && <button onClick={() => setPad(0, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 9, color: RED }}>−</button>}
-                    <button onClick={() => setPad(1, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "transparent", cursor: "pointer", fontSize: 9, color: "#9CA3AF" }}>+下</button>
-                    {padBot > 0 && <button onClick={() => setPad(1, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 9, color: RED }}>−</button>}
-                    <button onClick={() => setPad(2, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "transparent", cursor: "pointer", fontSize: 9, color: "#9CA3AF" }}>+左</button>
-                    {padLeft > 0 && <button onClick={() => setPad(2, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 9, color: RED }}>−</button>}
-                    <button onClick={() => setPad(3, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "transparent", cursor: "pointer", fontSize: 9, color: "#9CA3AF" }}>+右</button>
-                    {padRight > 0 && <button onClick={() => setPad(3, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 9, color: RED }}>−</button>}
-                    {(padTop > 0 || padBot > 0 || padLeft > 0 || padRight > 0) && <button onClick={resetPad} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 9, color: RED }}>重置</button>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", flexWrap: "wrap" }}>
+                    {QUICK_STAMPS.map((s, i) => (<button key={i} onClick={() => { setPendingStamp(s); setStrokeColor(s.color); setMovingIdx(-1); }} style={{ padding: "3px 10px", borderRadius: 6, border: pendingStamp?.label === s.label ? "2px solid " + s.color : "1px solid #E8E8E4", background: pendingStamp?.label === s.label ? s.color + "15" : "#fff", color: s.color, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{s.label}</button>))}
+                    {pendingStamp && <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 4 }}>← 点击放置</span>}
+                    <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 4px" }} />
+                    <button onClick={() => setPad(0, v => v + 120)} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 11, color: "#9CA3AF" }}>+上</button>
+                    {padTop > 0 && <button onClick={() => setPad(0, v => Math.max(0, v - 120))} style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 11, color: RED }}>−</button>}
+                    <button onClick={() => setPad(1, v => v + 120)} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 11, color: "#9CA3AF" }}>+下</button>
+                    {padBot > 0 && <button onClick={() => setPad(1, v => Math.max(0, v - 120))} style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 11, color: RED }}>−</button>}
+                    <button onClick={() => setPad(2, v => v + 120)} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 11, color: "#9CA3AF" }}>+左</button>
+                    {padLeft > 0 && <button onClick={() => setPad(2, v => Math.max(0, v - 120))} style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 11, color: RED }}>−</button>}
+                    <button onClick={() => setPad(3, v => v + 120)} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 11, color: "#9CA3AF" }}>+右</button>
+                    {padRight > 0 && <button onClick={() => setPad(3, v => Math.max(0, v - 120))} style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 11, color: RED }}>−</button>}
+                    {(padTop > 0 || padBot > 0 || padLeft > 0 || padRight > 0) && <button onClick={resetPad} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 11, color: RED }}>重置</button>}
                   </div>
                 </div>
                 {/* Canvas content */}

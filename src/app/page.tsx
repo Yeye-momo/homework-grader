@@ -285,7 +285,7 @@ export default function Home() {
   function mDown(e: React.MouseEvent<HTMLCanvasElement>) {
     if (e.button !== 0) return; const p = gp(e);
     if (movingIdx >= 0) { saveToHistory(); setMovingIdx(-1); return; }
-    if (hoverIdx >= 0 && movingIdx < 0 && tool !== "penEraser") { const btnHit = isOnMoveBtn(p.x, p.y); if (btnHit >= 0) { const a = (actionMap[pk] || [])[btnHit]; if (!a) return; const b = getActionBounds(a); if (!b) return; setMovingIdx(btnHit); setMovingOffset({ x: p.x - b.x, y: p.y - b.y }); return; } }
+    if (hoverIdx >= 0 && movingIdx < 0) { const btnHit = isOnMoveBtn(p.x, p.y); if (btnHit >= 0) { const a = (actionMap[pk] || [])[btnHit]; if (!a) return; const b = getActionBounds(a); if (!b) return; setMovingIdx(btnHit); setMovingOffset({ x: p.x - b.x, y: p.y - b.y }); return; } }
     if (pendingStamp) { pushAct({ type: "text", color: pendingStamp.color, lineWidth: penWidth, x: p.x, y: p.y, text: pendingStamp.label, fontSize }); setPendingStamp(null); return; }
     if (tool === "hand") { const wrap = document.getElementById("canvas-wrap"); if (wrap) { setHandDragging(true); setHandStart({ x: e.clientX, y: e.clientY, scrollX: wrap.scrollLeft, scrollY: wrap.scrollTop }); } return; }
     if (tool === "pen") { setIsDrawing(true); setCurPoints([p]); }
@@ -516,8 +516,8 @@ export default function Home() {
       const essayDetail = await r2.json(); updateStudent(sid, { essayDetail, status: "done" }); onP?.(100, "批改完成！");
     } catch (err: any) { updateStudent(sid, { status: "error", errorMsg: err.message || "未知错误" }); throw err; }
   }
-  async function runGrading() { if (!activeStudent || (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0)) { alert("请先上传作业照片"); return; } setLoading(true); setProgress(0); setStepText("准备中..."); try { await gradeOneStudent(activeStudentId, (p, t) => { setProgress(p); setStepText(t); }); setTab("detail"); } catch {} finally { setLoading(false); } }
-  async function retryGrading(sid: string) { setLoading(true); setProgress(0); setStepText("重试中..."); try { await gradeOneStudent(sid, (p, t) => { setProgress(p); setStepText(t); }); setTab("detail"); } catch {} finally { setLoading(false); } }
+  async function runGrading() { if (!activeStudent || (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0)) { alert("请先上传作业照片"); return; } setLoading(true); setProgress(0); setStepText("准备中..."); try { await gradeOneStudent(activeStudentId, (p, t) => { setProgress(p); setStepText(t); }); } catch {} finally { setLoading(false); } }
+  async function retryGrading(sid: string) { setLoading(true); setProgress(0); setStepText("重试中..."); try { await gradeOneStudent(sid, (p, t) => { setProgress(p); setStepText(t); }); } catch {} finally { setLoading(false); } }
   async function runBatchGrading() {
     let toGrade: Student[];
     if (selectedForBatch.size > 0) {
@@ -533,7 +533,7 @@ export default function Home() {
       try { await gradeOneStudent(stu.id, (p) => { setProgress(base + Math.round((p / 100) * (100 / toGrade.length))); }); } catch {}
       done++;
     }
-    setProgress(100); setBatchStatus(`全部完成！共批改 ${done} 位学生`); setLoading(false); setSelectedForBatch(new Set()); setTab("detail"); setTimeout(() => setBatchStatus(""), 3000);
+    setProgress(100); setBatchStatus(`全部完成！共批改 ${done} 位学生`); setLoading(false); setSelectedForBatch(new Set()); setTimeout(() => setBatchStatus(""), 3000);
   }
 
   function clipCopy(text: string, msg?: string) { navigator.clipboard.writeText(text).then(() => { setCopyMsg(msg || "已复制！"); setTimeout(() => setCopyMsg(""), 1500); }); }
@@ -637,7 +637,7 @@ export default function Home() {
       {batchStatus && <div style={{ background: "#F0F7F2", padding: "10px 32px", fontSize: 14, fontWeight: 600, color: GREEN, borderBottom: "1px solid #D4E5D9" }}>{batchStatus}</div>}
 
       <div style={{ maxWidth: 1400, margin: "0 auto", padding: "8px 20px" }}>
-        {tab !== "detail" && <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 10 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => { setTab("detail"); const done = students.filter(s => s.status === "done"); if (done.length > 0 && !done.find(s => s.id === activeStudentId)) setActiveStudentId(done[0].id); }}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>}
+        {tab !== "detail" && <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 10 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>}
 
         {tab === "upload" && (
           <div>
@@ -740,15 +740,29 @@ export default function Home() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
             <button onClick={() => setTab("upload")} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>← 返回</button>
             <div style={{ display: "flex", gap: 6 }}>
-              {activeStudent && <button onClick={copyAllDetail} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>复制全部</button>}
-              {activeStudent && <button onClick={generateParentNotice} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>家长通知</button>}
+              {activeStudent?.status === "done" && <button onClick={copyAllDetail} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>复制全部</button>}
+              {activeStudent?.status === "done" && <button onClick={generateParentNotice} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>家长通知</button>}
             </div>
           </div>
-          {students.filter(s => s.status === "done").length === 0 && <div style={{ textAlign: "center", padding: "80px 20px" }}>
-            <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>📝</div>
-            <p style={{ fontSize: 16, fontWeight: 600, color: "#9CA3AF", marginBottom: 8 }}>还没有批改完成的学生</p>
-            <p style={{ fontSize: 13, color: "#D1D5DB", marginBottom: 20 }}>上传作业照片并点击批改后，结果会显示在这里</p>
-            <button onClick={() => setTab("upload")} style={{ padding: "10px 28px", borderRadius: 8, border: "none", background: PRIMARY, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>去上传作业</button>
+          {!activeStudent && <div style={{ textAlign: "center", padding: "80px 20px" }}>
+            <p style={{ fontSize: 16, fontWeight: 600, color: "#9CA3AF", marginBottom: 8 }}>请先选择一个学生</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB" }}>在"上传作业"页面添加学生后，可以在这里查看批改结果</p>
+          </div>}
+          {activeStudent && activeStudent.status === "idle" && (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) && <div style={{ textAlign: "center", padding: "80px 20px" }}>
+            <p style={{ fontSize: 16, fontWeight: 600, color: "#9CA3AF", marginBottom: 8 }}>{activeStudent.name} 还没有上传作业照片</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB" }}>请先在"上传作业"页面上传照片</p>
+          </div>}
+          {activeStudent && activeStudent.status === "idle" && (activeStudent.images.length > 0 || activeStudent.imageUrls.length > 0) && <div style={{ textAlign: "center", padding: "80px 20px" }}>
+            <p style={{ fontSize: 16, fontWeight: 600, color: "#9CA3AF", marginBottom: 8 }}>{activeStudent.name} 还没有批改</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB" }}>已上传 {activeStudent.images.length || activeStudent.imageUrls.length} 张照片，请在"上传作业"页面点击批改</p>
+          </div>}
+          {activeStudent && activeStudent.status === "grading" && <div style={{ textAlign: "center", padding: "80px 20px" }}>
+            <p style={{ fontSize: 16, fontWeight: 600, color: ORANGE, marginBottom: 8 }}>{activeStudent.name} 正在批改中…</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB" }}>请稍候</p>
+          </div>}
+          {activeStudent && activeStudent.status === "error" && <div style={{ textAlign: "center", padding: "80px 20px" }}>
+            <p style={{ fontSize: 16, fontWeight: 600, color: RED, marginBottom: 8 }}>{activeStudent.name} 批改出错</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB" }}>{activeStudent.errorMsg || "请在"上传作业"页面重试"}</p>
           </div>}
           {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
             {/* LEFT: Canvas */}

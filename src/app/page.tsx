@@ -285,7 +285,7 @@ export default function Home() {
   function mDown(e: React.MouseEvent<HTMLCanvasElement>) {
     if (e.button !== 0) return; const p = gp(e);
     if (movingIdx >= 0) { saveToHistory(); setMovingIdx(-1); return; }
-    if (hoverIdx >= 0 && movingIdx < 0) { const btnHit = isOnMoveBtn(p.x, p.y); if (btnHit >= 0) { const a = (actionMap[pk] || [])[btnHit]; if (!a) return; const b = getActionBounds(a); if (!b) return; setMovingIdx(btnHit); setMovingOffset({ x: p.x - b.x, y: p.y - b.y }); return; } }
+    if (hoverIdx >= 0 && movingIdx < 0 && tool !== "penEraser") { const btnHit = isOnMoveBtn(p.x, p.y); if (btnHit >= 0) { const a = (actionMap[pk] || [])[btnHit]; if (!a) return; const b = getActionBounds(a); if (!b) return; setMovingIdx(btnHit); setMovingOffset({ x: p.x - b.x, y: p.y - b.y }); return; } }
     if (pendingStamp) { pushAct({ type: "text", color: pendingStamp.color, lineWidth: penWidth, x: p.x, y: p.y, text: pendingStamp.label, fontSize }); setPendingStamp(null); return; }
     if (tool === "hand") { const wrap = document.getElementById("canvas-wrap"); if (wrap) { setHandDragging(true); setHandStart({ x: e.clientX, y: e.clientY, scrollX: wrap.scrollLeft, scrollY: wrap.scrollTop }); } return; }
     if (tool === "pen") { setIsDrawing(true); setCurPoints([p]); }
@@ -637,7 +637,7 @@ export default function Home() {
       {batchStatus && <div style={{ background: "#F0F7F2", padding: "10px 32px", fontSize: 14, fontWeight: 600, color: GREEN, borderBottom: "1px solid #D4E5D9" }}>{batchStatus}</div>}
 
       <div style={{ maxWidth: 1400, margin: "0 auto", padding: "8px 20px" }}>
-        {tab !== "detail" && <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 10 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>}
+        {tab !== "detail" && <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 10 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => { setTab("detail"); const done = students.filter(s => s.status === "done"); if (done.length > 0 && !done.find(s => s.id === activeStudentId)) setActiveStudentId(done[0].id); }}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>}
 
         {tab === "upload" && (
           <div>
@@ -744,7 +744,12 @@ export default function Home() {
               {activeStudent && <button onClick={generateParentNotice} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>家长通知</button>}
             </div>
           </div>
-          {students.filter(s => s.status === "done").length === 0 && <p style={{ color: "#D1D5DB", fontSize: 13, textAlign: "center", padding: "40px 0" }}>还没有批改完成的学生</p>}
+          {students.filter(s => s.status === "done").length === 0 && <div style={{ textAlign: "center", padding: "80px 20px" }}>
+            <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>📝</div>
+            <p style={{ fontSize: 16, fontWeight: 600, color: "#9CA3AF", marginBottom: 8 }}>还没有批改完成的学生</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB", marginBottom: 20 }}>上传作业照片并点击批改后，结果会显示在这里</p>
+            <button onClick={() => setTab("upload")} style={{ padding: "10px 28px", borderRadius: 8, border: "none", background: PRIMARY, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>去上传作业</button>
+          </div>}
           {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
             {/* LEFT: Canvas */}
             <div style={{ flex: isMobile ? "auto" : "0 0 58%", display: "flex", flexDirection: "column" }}>

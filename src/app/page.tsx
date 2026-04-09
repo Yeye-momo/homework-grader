@@ -591,7 +591,7 @@ export default function Home() {
         </div>
       </div>}
 
-      <div style={{ background: "#fff", padding: isMobile ? "10px 16px" : "12px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, borderBottom: "1px solid #E8E8E4" }}>
+      {tab !== "detail" && <div style={{ background: "#fff", padding: isMobile ? "10px 16px" : "12px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, borderBottom: "1px solid #E8E8E4" }}>
         <div><h1 style={{ fontSize: isMobile ? 16 : 19, fontWeight: 700, color: "#1F2937", margin: 0, letterSpacing: 0.5 }}>语文作业智能批改</h1><p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>上传照片 · AI批注 · 导出</p></div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <button onClick={runBatchGrading} disabled={loading} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "none", background: PRIMARY, color: "#fff", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.5 : 1 }}>批改全部</button>
@@ -601,11 +601,11 @@ export default function Home() {
           <button onClick={() => setShowSettings(true)} style={{ width: 36, height: 36, borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} title="设置">⚙</button>
           <input ref={importFileRef} type="file" accept=".json" onChange={importData} style={{ display: "none" }} />
         </div>
-      </div>
+      </div>}
       {batchStatus && <div style={{ background: "#F0F7F2", padding: "10px 32px", fontSize: 14, fontWeight: 600, color: GREEN, borderBottom: "1px solid #D4E5D9" }}>{batchStatus}</div>}
 
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "12px 20px" }}>
-        <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 16 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "8px 20px" }}>
+        {tab !== "detail" && <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 10 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>}
 
         {tab === "upload" && (
           <div>
@@ -704,53 +704,68 @@ export default function Home() {
         )}
 
         {tab === "detail" && <div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>{students.filter(s => s.status === "done").map(s => (<button key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} style={{ padding: "6px 16px", borderRadius: 6, border: "none", cursor: "pointer", background: activeStudentId === s.id ? PRIMARY : "#eee", color: activeStudentId === s.id ? "#fff" : "#666", fontWeight: 600, fontSize: 13 }}>{s.name}</button>))}{students.filter(s => s.status === "done").length === 0 && <p style={{ color: "#bbb", fontSize: 14 }}>还没有批改完成的学生</p>}</div>
-          {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16 }}>
-            <div style={{ flex: isMobile ? "auto" : "0 0 58%", display: "flex", flexDirection: "column" }}>
-              {/* Compact single-row toolbar */}
-              <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", marginBottom: 4, background: "#fff", borderRadius: 8, border: "1px solid #E8E8E4", flexWrap: "nowrap", overflowX: "auto" }}>
-                {toolDefs.map(t => (<button key={t.k} onClick={() => { setTool(t.k); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }} title={t.l} style={{ width: 32, height: 32, borderRadius: 6, border: "none", cursor: "pointer", background: tool === t.k && !pendingStamp ? PRIMARY : "transparent", color: tool === t.k && !pendingStamp ? "#fff" : "#6B7280", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{t.ic}</button>))}
-                <div style={{ width: 1, height: 20, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
-                <button onClick={undo} title="撤销" style={{ width: 32, height: 32, borderRadius: 6, border: "none", cursor: "pointer", background: "transparent", fontSize: 15, flexShrink: 0 }}>↩</button>
-                <button onClick={redo} title="重做" style={{ width: 32, height: 32, borderRadius: 6, border: "none", cursor: "pointer", background: "transparent", fontSize: 15, flexShrink: 0 }}>↪</button>
-                <div style={{ width: 1, height: 20, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
-                {[RED, ORANGE, "#2980b9", GREEN, "#333"].map(c => (<div key={c} onClick={() => setStrokeColor(c)} style={{ width: 18, height: 18, borderRadius: "50%", background: c, cursor: "pointer", border: strokeColor === c ? "2px solid #333" : "2px solid #E0E0DC", flexShrink: 0 }} />))}
-                <input type="color" value={strokeColor} onChange={e => setStrokeColor(e.target.value)} title="自定义颜色" style={{ width: 20, height: 20, border: "none", padding: 0, cursor: "pointer", borderRadius: 4, flexShrink: 0 }} />
-                <div style={{ width: 1, height: 20, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
-                <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>{fontSize}px</span>
-                <input type="range" min={8} max={48} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} style={{ width: 60, cursor: "pointer", flexShrink: 0 }} title="字号" />
-                <div style={{ width: 1, height: 20, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
-                <button onClick={exportPNG} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>导出</button>
-                <button onClick={copyImageToClipboard} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11, fontWeight: 600, flexShrink: 0 }} title="复制图片到剪贴板">复制图片</button>
-              </div>
-              {/* Quick stamps + canvas controls in one compact row */}
-              <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 8px", marginBottom: 4, background: "#fff", borderRadius: 8, border: "1px solid #E8E8E4", flexWrap: "wrap" }}>
-                {QUICK_STAMPS.map((s, i) => (<button key={i} onClick={() => { setPendingStamp(s); setStrokeColor(s.color); setMovingIdx(-1); }} style={{ padding: "2px 8px", borderRadius: 4, border: pendingStamp?.label === s.label ? "2px solid " + s.color : "1px solid #E0E0DC", background: pendingStamp?.label === s.label ? s.color + "18" : "#fff", color: s.color, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{s.label}</button>))}
-                {pendingStamp && <span style={{ fontSize: 10, color: "#9CA3AF", marginLeft: 4 }}>← 点击放置</span>}
-                <div style={{ width: 1, height: 16, background: "#E0E0DC", margin: "0 4px" }} />
-                <button onClick={() => setPad(0, v => v + 120)} style={{ padding: "1px 6px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF" }}>+上</button>
-                <button onClick={() => setPad(1, v => v + 120)} style={{ padding: "1px 6px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF" }}>+下</button>
-                <button onClick={() => setPad(2, v => v + 120)} style={{ padding: "1px 6px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF" }}>+左</button>
-                <button onClick={() => setPad(3, v => v + 120)} style={{ padding: "1px 6px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF" }}>+右</button>
-                {(padTop > 0 || padBot > 0 || padLeft > 0 || padRight > 0) && <button onClick={resetPad} style={{ padding: "1px 6px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED }}>重置</button>}
-              </div>
-              <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 220px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
+          {/* Minimal top bar for detail mode */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <button onClick={() => setTab("upload")} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>← 返回</button>
+            <div style={{ display: "flex", gap: 6 }}>
+              {activeStudent && <button onClick={copyAllDetail} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>复制全部</button>}
+              {activeStudent && <button onClick={generateParentNotice} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>家长通知</button>}
+            </div>
+          </div>
+          {students.filter(s => s.status === "done").length === 0 && <p style={{ color: "#D1D5DB", fontSize: 13, textAlign: "center", padding: "40px 0" }}>还没有批改完成的学生</p>}
+          {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
+            {/* LEFT: Canvas */}
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+              {/* Canvas container with floating toolbars */}
+              <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
+                {/* Floating toolbar - top */}
+                <div style={{ position: "sticky", top: 0, zIndex: 20, padding: "4px 6px", display: "flex", flexDirection: "column", gap: 3 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", background: "rgba(255,255,255,0.92)", borderRadius: 8, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", flexWrap: "nowrap", overflowX: "auto" }}>
+                    {toolDefs.map(t => (<button key={t.k} onClick={() => { setTool(t.k); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }} title={t.l} style={{ width: 30, height: 30, borderRadius: 6, border: "none", cursor: "pointer", background: tool === t.k && !pendingStamp ? PRIMARY : "transparent", color: tool === t.k && !pendingStamp ? "#fff" : "#6B7280", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{t.ic}</button>))}
+                    <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
+                    <button onClick={undo} title="撤销" style={{ width: 30, height: 30, borderRadius: 6, border: "none", cursor: "pointer", background: "transparent", fontSize: 14, flexShrink: 0 }}>↩</button>
+                    <button onClick={redo} title="重做" style={{ width: 30, height: 30, borderRadius: 6, border: "none", cursor: "pointer", background: "transparent", fontSize: 14, flexShrink: 0 }}>↪</button>
+                    <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
+                    {[RED, ORANGE, "#2980b9", GREEN, "#333"].map(c => (<div key={c} onClick={() => setStrokeColor(c)} style={{ width: 16, height: 16, borderRadius: "50%", background: c, cursor: "pointer", border: strokeColor === c ? "2px solid #333" : "2px solid #E0E0DC", flexShrink: 0 }} />))}
+                    <input type="color" value={strokeColor} onChange={e => setStrokeColor(e.target.value)} title="自定义颜色" style={{ width: 18, height: 18, border: "none", padding: 0, cursor: "pointer", borderRadius: 3, flexShrink: 0 }} />
+                    <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
+                    <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>{fontSize}</span>
+                    <input type="range" min={8} max={48} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} style={{ width: 50, cursor: "pointer", flexShrink: 0 }} />
+                    <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 2px", flexShrink: 0 }} />
+                    <button onClick={exportPNG} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 10, fontWeight: 600, flexShrink: 0 }}>导出</button>
+                    <button onClick={copyImageToClipboard} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 10, fontWeight: 600, flexShrink: 0 }}>复制</button>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "3px 8px", background: "rgba(255,255,255,0.92)", borderRadius: 8, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", flexWrap: "wrap" }}>
+                    {QUICK_STAMPS.map((s, i) => (<button key={i} onClick={() => { setPendingStamp(s); setStrokeColor(s.color); setMovingIdx(-1); }} style={{ padding: "1px 6px", borderRadius: 4, border: pendingStamp?.label === s.label ? "2px solid " + s.color : "1px solid #E8E8E4", background: pendingStamp?.label === s.label ? s.color + "15" : "transparent", color: s.color, fontSize: 10, fontWeight: 600, cursor: "pointer" }}>{s.label}</button>))}
+                    {pendingStamp && <span style={{ fontSize: 9, color: "#9CA3AF" }}>← 点击放置</span>}
+                    <div style={{ width: 1, height: 14, background: "#E0E0DC", margin: "0 3px" }} />
+                    <button onClick={() => setPad(0, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "transparent", cursor: "pointer", fontSize: 9, color: "#9CA3AF" }}>+上</button>
+                    {padTop > 0 && <button onClick={() => setPad(0, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 9, color: RED }}>−</button>}
+                    <button onClick={() => setPad(1, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "transparent", cursor: "pointer", fontSize: 9, color: "#9CA3AF" }}>+下</button>
+                    {padBot > 0 && <button onClick={() => setPad(1, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 9, color: RED }}>−</button>}
+                    <button onClick={() => setPad(2, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "transparent", cursor: "pointer", fontSize: 9, color: "#9CA3AF" }}>+左</button>
+                    {padLeft > 0 && <button onClick={() => setPad(2, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 9, color: RED }}>−</button>}
+                    <button onClick={() => setPad(3, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "transparent", cursor: "pointer", fontSize: 9, color: "#9CA3AF" }}>+右</button>
+                    {padRight > 0 && <button onClick={() => setPad(3, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 9, color: RED }}>−</button>}
+                    {(padTop > 0 || padBot > 0 || padLeft > 0 || padRight > 0) && <button onClick={resetPad} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 9, color: RED }}>重置</button>}
+                  </div>
+                </div>
+                {/* Canvas content */}
                 {activeStudent.imageUrls[pageIndex] && <div style={{ position: "relative", background: "#fff", display: "inline-block", minWidth: "100%" }}>
                   {padTop > 0 && <div style={{ height: padTop, background: "#fff" }} />}
                   <div style={{ display: "flex" }}>{padLeft > 0 && <div style={{ width: padLeft, flexShrink: 0, background: "#fff" }} />}<img ref={imgRef} src={activeStudent.imageUrls[pageIndex]} alt="" style={{ maxWidth: "100%", width: "auto", display: "block" }} onLoad={syncCanvas} onDragStart={e => e.preventDefault()} />{padRight > 0 && <div style={{ width: padRight, flexShrink: 0, background: "#fff" }} />}</div>
                   {padBot > 0 && <div style={{ height: padBot, background: "#fff" }} />}
                   <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, cursor: movingIdx >= 0 ? "grabbing" : pendingStamp ? "copy" : tool === "hand" ? (handDragging ? "grabbing" : "grab") : tool === "text" ? "text" : tool === "eraser" ? "pointer" : tool === "penEraser" ? "crosshair" : "crosshair" }} onMouseDown={mDown} onMouseMove={mMove} onMouseUp={mUp} onDoubleClick={mDblClick} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()} onMouseLeave={() => { if (isDrawing) { setIsDrawing(false); redraw(); } if (handDragging) setHandDragging(false); setHoverIdx(-1); }} />
-                  {movingIdx >= 0 && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(44,62,107,0.9)", color: "#fff", padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, zIndex: 30, pointerEvents: "none" }}>移动中 · 单击放置 · Esc取消</div>}
+                  {movingIdx >= 0 && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(45,74,62,0.9)", color: "#fff", padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, zIndex: 30, pointerEvents: "none" }}>移动中 · 单击放置 · Esc取消</div>}
                   {textPos && <textarea ref={txtRef} value={textVal} onChange={e => setTextVal(e.target.value)} onKeyDown={e => { if (e.key === "Escape") { setTextPos(null); setTextVal(""); setEditIdx(-1); } }} onBlur={() => setTimeout(() => commitText(), 80)} onContextMenu={e => e.stopPropagation()} style={{ position: "absolute", left: textPos.x, top: textPos.y - 4, fontSize, fontWeight: "bold", color: strokeColor, background: "rgba(255,255,255,0.92)", border: "2px solid " + strokeColor, borderRadius: 4, padding: "2px 6px", outline: "none", zIndex: 10, width: textBoxW, minWidth: 80, minHeight: fontSize * 1.4 + 12, lineHeight: 1.4, fontFamily: "'Noto Sans SC','Microsoft YaHei',sans-serif", resize: "both", overflow: "hidden", whiteSpace: "pre-wrap", wordBreak: "break-all", boxSizing: "border-box" }} />}
                 </div>}
               </div>
-              {activeStudent.imageUrls.length > 1 && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "8px 0" }}><button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)} style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid #ddd", cursor: "pointer", background: "#fff", fontSize: 13 }}>← 上一页</button><span style={{ fontSize: 13, color: "#666" }}>{"第 " + (pageIndex + 1) + " / " + activeStudent.imageUrls.length + " 页"}</span><button disabled={pageIndex >= activeStudent.imageUrls.length - 1} onClick={() => setPageIndex(i => i + 1)} style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid #ddd", cursor: "pointer", background: "#fff", fontSize: 13 }}>下一页 →</button></div>}
-              <p style={{ fontSize: 11, color: "#bbb", textAlign: "center", margin: "4px 0 0" }}>💡 快捷键 1-7 切换工具 · 双击文字编辑 · 靠近批注显示✥移动按钮 · Esc取消</p>
+              {activeStudent.imageUrls.length > 1 && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "4px 0" }}><button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>← 上一页</button><span style={{ fontSize: 11, color: "#6B7280" }}>{"第 " + (pageIndex + 1) + " / " + activeStudent.imageUrls.length + " 页"}</span><button disabled={pageIndex >= activeStudent.imageUrls.length - 1} onClick={() => setPageIndex(i => i + 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>下一页 →</button></div>}
             </div>
 
-            <div style={{ flex: isMobile ? "auto" : "1 1 40%", minWidth: 0, overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 180px)" }}>
+            {/* MIDDLE: Detail panel */}
+            <div style={{ flex: isMobile ? "auto" : "1 1 38%", minWidth: 0, overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 100px)", padding: "0 12px" }}>
               {activeStudent.essayDetail ? <>
-                <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}><button onClick={copyAllDetail} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>复制全部</button><button onClick={generateParentNotice} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>家长通知</button></div>
                 <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: RED }}>逐段批注</h3>{(activeStudent.essayDetail.corrections || []).map((c: any, i: number) => (<div key={i} style={{ background: "#fff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #eee" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}><div style={{ flex: 1 }}><span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: c.type === "praise" ? GREEN : RED, color: "#fff" }}>{c.paragraph}{c.type === "praise" ? " +" : ""}</span><p style={{ fontSize: 13, margin: "4px 0 0", color: "#444" }}>{c.text}</p></div><button onClick={() => copyOneCorrection(c)} style={cpBtnS} title="复制批注">复制</button></div>{c.suggested && c.type !== "praise" && <div style={{ marginTop: 4, padding: "4px 10px", borderRadius: 5, background: "#edf9f1", borderLeft: "3px solid " + GREEN, fontSize: 13, color: GREEN, display: "flex", justifyContent: "space-between", alignItems: "center" }}>→ {c.suggested}<button onClick={() => copyOneSuggested(c)} style={{ ...cpBtnS, color: GREEN }} title="复制建议">复制</button></div>}</div>))}</div>
                 {activeStudent.essayDetail.model_suggestions?.length > 0 && <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: "#2980b9" }}>范文对比修改建议</h3>{activeStudent.essayDetail.model_suggestions.map((s: any, i: number) => (<div key={i} style={{ background: "#f0f8ff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #b8d8f0" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}><span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "#2980b9", color: "#fff" }}>{s.paragraph}</span><button onClick={() => copyModelSuggestion(s)} style={cpBtnS} title="复制">复制</button></div><p style={{ fontSize: 12, margin: "6px 0 2px", color: "#888" }}>学生原句：<span style={{ color: "#555" }}>{s.student_text}</span></p><p style={{ fontSize: 12, margin: "2px 0", color: "#888" }}>范文参考：<span style={{ color: "#2980b9", fontWeight: 600 }}>{s.model_text}</span></p><p style={{ fontSize: 13, margin: "4px 0 0", color: "#444", lineHeight: 1.7 }}>{s.suggestion}</p></div>))}</div>}
                 {activeStudent.essayDetail.good_phrases?.length > 0 && <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: RED }}>好词好句</h3><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{activeStudent.essayDetail.good_phrases.map((g: any, i: number) => (<span key={i} style={{ padding: "4px 12px", borderRadius: 20, background: g.type === "word" ? "#fef2f2" : "#fff8ed", border: "1px solid " + (g.type === "word" ? "#f0c0c0" : "#f0e0c0"), fontSize: 13, color: "#555" }}>{g.phrase} <span style={{ fontSize: 11, color: "#999" }}>{g.paragraph}</span></span>))}</div></div>}
@@ -760,6 +775,12 @@ export default function Home() {
                 {activeStudent.essayDetail.improvement_tips?.length > 0 && <div style={{ background: "#f0f4ff", borderRadius: 8, padding: 16, border: "1px solid #d0d8f0", position: "relative" }}><button onClick={copyAllTips} style={{ ...cpBtnS, position: "absolute", top: 12, right: 12 }}>复制</button><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: PRIMARY }}>改进方向</h3>{activeStudent.essayDetail.improvement_tips.map((tip: string, i: number) => (<p key={i} style={{ fontSize: 13, lineHeight: 1.8, margin: "0 0 6px", color: "#444" }}>{tip}</p>))}</div>}
               </> : <p style={{ color: "#bbb", textAlign: "center", paddingTop: 40 }}>请先批改后查看</p>}
             </div>
+            {/* RIGHT: Student list sidebar */}
+            {!isMobile && <div style={{ width: 56, flexShrink: 0, display: "flex", flexDirection: "column", gap: 4, paddingTop: 4, overflow: "auto", maxHeight: "calc(100vh - 100px)" }}>
+              {students.filter(s => s.status === "done").map(s => (
+                <button key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} title={s.name} style={{ width: 48, height: 48, borderRadius: 10, border: activeStudentId === s.id ? "2px solid " + PRIMARY : "1px solid #E0E0DC", cursor: "pointer", background: activeStudentId === s.id ? PRIMARY_LIGHT : "#fff", color: activeStudentId === s.id ? PRIMARY : "#6B7280", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}>{s.name.slice(0, 1)}</button>
+              ))}
+            </div>}
           </div>}
         </div>}
 

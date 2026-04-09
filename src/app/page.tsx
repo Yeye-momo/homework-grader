@@ -111,6 +111,8 @@ export default function Home() {
   const [customApiKey, setCustomApiKey] = useState("");
   const [customEpPro, setCustomEpPro] = useState("");
   const [customEpFast, setCustomEpFast] = useState("");
+  const [splitPct, setSplitPct] = useState(() => { try { const v = Number(localStorage.getItem("hw_split_pct")); return v >= 25 && v <= 75 ? v : 55; } catch { return 55; } });
+  const splitDrag = useRef(false);
 
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -388,6 +390,13 @@ export default function Home() {
     if (toolKeys[e.key] && !e.ctrlKey && !e.metaKey) { setTool(toolKeys[e.key]); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }
   } window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); });
 
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => { if (!splitDrag.current) return; e.preventDefault(); const c = document.getElementById("detail-split"); if (!c) return; const r = c.getBoundingClientRect(); const p = ((e.clientX - r.left) / r.width) * 100; const clamped = Math.max(25, Math.min(75, p)); setSplitPct(clamped); };
+    const onUp = () => { if (splitDrag.current) { splitDrag.current = false; document.body.style.cursor = ""; document.body.style.userSelect = ""; try { localStorage.setItem("hw_split_pct", String(splitPct)); } catch {} } };
+    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  });
+
   // Global full-screen drag overlay
   useEffect(() => {
     function onDragEnter(e: DragEvent) { e.preventDefault(); globalDragCounter.current++; if (globalDragCounter.current === 1) setGlobalDragOver(true); }
@@ -637,7 +646,7 @@ export default function Home() {
       </div>}
       {batchStatus && <div style={{ background: "#F0F7F2", padding: "10px 32px", fontSize: 14, fontWeight: 600, color: GREEN, borderBottom: "1px solid #D4E5D9" }}>{batchStatus}</div>}
 
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "8px 20px" }}>
+      <div style={{ margin: "0 auto", padding: "8px 20px" }}>
         {tab !== "detail" && <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 10 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>}
 
         {tab === "upload" && (
@@ -765,9 +774,9 @@ export default function Home() {
             <p style={{ fontSize: 16, fontWeight: 600, color: RED, marginBottom: 8 }}>{activeStudent.name} 批改出错</p>
             <p style={{ fontSize: 13, color: "#D1D5DB" }}>{activeStudent.errorMsg || `请在「上传作业」页面重试`}</p>
           </div>}
-          {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
+          {activeStudent?.status === "done" && <div id="detail-split" style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
             {/* LEFT: Canvas */}
-            <div style={{ flex: isMobile ? "auto" : "0 0 58%", display: "flex", flexDirection: "column" }}>
+            <div style={{ flex: isMobile ? "auto" : `0 0 ${splitPct}%`, display: "flex", flexDirection: "column", minWidth: 0 }}>
               {/* Canvas container with floating toolbars */}
               <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
                 {/* Floating toolbar - top */}
@@ -822,6 +831,9 @@ export default function Home() {
               </div>
               {activeStudent.imageUrls.length > 1 && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "4px 0" }}><button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>← 上一页</button><span style={{ fontSize: 11, color: "#6B7280" }}>{"第 " + (pageIndex + 1) + " / " + activeStudent.imageUrls.length + " 页"}</span><button disabled={pageIndex >= activeStudent.imageUrls.length - 1} onClick={() => setPageIndex(i => i + 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>下一页 →</button></div>}
             </div>
+
+            {/* Draggable splitter */}
+            {!isMobile && <div onMouseDown={e => { e.preventDefault(); splitDrag.current = true; document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none"; }} style={{ width: 6, flexShrink: 0, cursor: "col-resize", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}><div style={{ width: 3, height: 40, borderRadius: 2, background: "#D1D5DB", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = PRIMARY)} onMouseLeave={e => (e.currentTarget.style.background = "#D1D5DB")} /></div>}
 
             {/* MIDDLE: Detail panel */}
             <div style={{ flex: 1, minWidth: 0, overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 100px)", padding: "0 12px" }}>

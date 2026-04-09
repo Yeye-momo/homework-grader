@@ -141,6 +141,7 @@ export default function Home() {
     const dx = idx === 2 ? diff : 0; const dy = idx === 0 ? diff : 0; shiftAnnotations(dx, dy);
     setPadMap(prev => { const next = [...(prev[pk] || [0,0,0,0])] as [number,number,number,number]; next[idx] = newVal; return { ...prev, [pk]: next }; });
   }
+  function setPadVal(idx: number, newVal: number) { setPad(idx, () => newVal); }
   function resetPad() { const cur = padMap[pk] || [0,0,0,0]; shiftAnnotations(-cur[2], -cur[0]); setPadMap(prev => ({ ...prev, [pk]: [0,0,0,0] })); }
 
   const [initDone, setInitDone] = useState(false);
@@ -798,15 +799,13 @@ export default function Home() {
                     {QUICK_STAMPS.map((s, i) => (<button key={i} onClick={() => { setPendingStamp(s); setStrokeColor(s.color); setMovingIdx(-1); }} style={{ flex: "1 1 0", padding: "4px 1px", borderRadius: 5, border: pendingStamp?.label === s.label ? "2px solid " + s.color : "1px solid #E8E8E4", background: pendingStamp?.label === s.label ? s.color + "15" : "#fff", color: s.color, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</button>))}
                     {pendingStamp && <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0, whiteSpace: "nowrap" }}>← 放置</span>}
                     <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 1px", flexShrink: 0 }} />
-                    <div style={{ display: "flex", gap: 2, flexShrink: 0, alignItems: "center" }}>
-                    <button onClick={() => setPad(0, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>+上</button>
-                    {padTop > 0 && <button onClick={() => setPad(0, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED, flexShrink: 0 }}>−</button>}
-                    <button onClick={() => setPad(1, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>+下</button>
-                    {padBot > 0 && <button onClick={() => setPad(1, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED, flexShrink: 0 }}>−</button>}
-                    <button onClick={() => setPad(2, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>+左</button>
-                    {padLeft > 0 && <button onClick={() => setPad(2, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED, flexShrink: 0 }}>−</button>}
-                    <button onClick={() => setPad(3, v => v + 120)} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #E0E0DC", background: "#fff", cursor: "pointer", fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>+右</button>
-                    {padRight > 0 && <button onClick={() => setPad(3, v => Math.max(0, v - 120))} style={{ padding: "1px 4px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED, flexShrink: 0 }}>−</button>}
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>
+                    {([["上", 0], ["下", 1], ["左", 2], ["右", 3]] as const).map(([label, idx]) => (
+                      <div key={idx} style={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0 }}>
+                        <span style={{ fontSize: 9, color: "#9CA3AF", width: 12, textAlign: "center" }}>{label}</span>
+                        <input type="range" min={0} max={600} step={10} value={pad[idx]} onChange={e => setPadVal(idx, Number(e.target.value))} style={{ width: 48, height: 14, cursor: "pointer", accentColor: pad[idx] > 0 ? PRIMARY : "#D1D5DB" }} />
+                      </div>
+                    ))}
                     {(padTop > 0 || padBot > 0 || padLeft > 0 || padRight > 0) && <button onClick={resetPad} style={{ padding: "1px 5px", borderRadius: 3, border: "1px solid #FECACA", background: "#FEF2F2", cursor: "pointer", fontSize: 10, color: RED, flexShrink: 0 }}>重置</button>}
                     </div>
                   </div>

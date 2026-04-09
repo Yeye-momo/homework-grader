@@ -81,7 +81,6 @@ export default function Home() {
   const [penWidth] = useState(2);
   const [fontSize, setFontSize] = useState(14);
   const [textAlign, setTextAlign] = useState<"left" | "center" | "right" | "justify">("justify");
-  const [showAlignMenu, setShowAlignMenu] = useState(false);
   const [toolbarExpanded, setToolbarExpanded] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState({ x: 0, y: 0 });
@@ -228,13 +227,8 @@ export default function Home() {
         const align = a.textAlign || "justify";
         for (let li = 0; li < lines.length; li++) {
           const lw = ctx.measureText(lines[li]).width;
-          if (align === "justify" && li < lines.length - 1 && lines[li].length > 1 && boxW > lw + 2) {
-            const chars = lines[li].split(""); const totalGap = boxW - chars.reduce((s, c) => s + ctx.measureText(c).width, 0); const gap = totalGap / (chars.length - 1); let cx = a.x;
-            for (let ci = 0; ci < chars.length; ci++) { ctx.fillText(chars[ci], cx, a.y + li * (fs * 1.4)); cx += ctx.measureText(chars[ci]).width + gap; }
-          } else {
-            const dx = align === "center" ? (boxW - lw) / 2 : align === "right" ? boxW - lw : 0;
-            ctx.fillText(lines[li], a.x + dx, a.y + li * (fs * 1.4));
-          }
+          const dx = align === "center" ? (boxW - lw) / 2 : align === "right" ? boxW - lw : 0;
+          ctx.fillText(lines[li], a.x + dx, a.y + li * (fs * 1.4));
         }
       }
       else if (a.type === "wavy" && a.x != null && a.y != null && a.endX != null) { ctx.beginPath(); let wx = Math.min(a.x, a.endX); const mx = Math.max(a.x, a.endX); ctx.moveTo(wx, a.y); while (wx < mx) { ctx.quadraticCurveTo(wx + 4, a.y - 5, wx + 8, a.y); ctx.quadraticCurveTo(wx + 12, a.y + 5, wx + 16, a.y); wx += 16; } ctx.stroke(); }
@@ -366,7 +360,7 @@ export default function Home() {
           ctx.strokeStyle = a.color; ctx.fillStyle = a.color; ctx.lineWidth = a.lineWidth * scale; ctx.lineCap = "round"; ctx.lineJoin = "round";
           if (a.type === "pen" && a.points && a.points.length > 1) { ctx.beginPath(); ctx.moveTo(a.points[0].x * scale, a.points[0].y * scale); for (let i = 1; i < a.points.length; i++) ctx.lineTo(a.points[i].x * scale, a.points[i].y * scale); ctx.stroke(); }
           else if (a.type === "circle" && a.x != null && a.y != null && a.w != null && a.h != null) { const rx = Math.abs(a.w * scale) / 2, ry = Math.abs(a.h * scale) / 2; if (rx > 0 && ry > 0) { ctx.beginPath(); ctx.ellipse((a.x + a.w / 2) * scale, (a.y + a.h / 2) * scale, rx, ry, 0, 0, Math.PI * 2); ctx.stroke(); } }
-          else if (a.type === "text" && a.x != null && a.y != null && a.text) { const fs = (a.fontSize || 18) * scale; ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; ctx.textBaseline = "top"; const mw = a.w ? a.w * scale : (totalW - a.x * scale - 10); const lines = wrapText(ctx, a.text, mw > 20 ? mw : 200); const textH = lines.length * fs * 1.4; let maxLW = 0; for (const l of lines) maxLW = Math.max(maxLW, ctx.measureText(l).width); const boxW = a.w ? a.w * scale : maxLW; ctx.fillStyle = "rgba(255,255,255,0.82)"; ctx.fillRect(a.x * scale - 2, a.y * scale - 1, boxW + 4, textH + 2); ctx.fillStyle = a.color; const align = a.textAlign || "justify"; for (let li = 0; li < lines.length; li++) { const lw = ctx.measureText(lines[li]).width; if (align === "justify" && li < lines.length - 1 && lines[li].length > 1 && boxW > lw + 2) { const chars = lines[li].split(""); const totalGap = boxW - chars.reduce((s2, c) => s2 + ctx.measureText(c).width, 0); const gap = totalGap / (chars.length - 1); let cx = a.x * scale; for (let ci = 0; ci < chars.length; ci++) { ctx.fillText(chars[ci], cx, a.y * scale + li * (fs * 1.4)); cx += ctx.measureText(chars[ci]).width + gap; } } else { const dx = align === "center" ? (boxW - lw) / 2 : align === "right" ? boxW - lw : 0; ctx.fillText(lines[li], a.x * scale + dx, a.y * scale + li * (fs * 1.4)); } } }
+          else if (a.type === "text" && a.x != null && a.y != null && a.text) { const fs = (a.fontSize || 18) * scale; ctx.font = `bold ${fs}px 'Noto Sans SC','Microsoft YaHei',sans-serif`; ctx.textBaseline = "top"; const mw = a.w ? a.w * scale : (totalW - a.x * scale - 10); const lines = wrapText(ctx, a.text, mw > 20 ? mw : 200); const textH = lines.length * fs * 1.4; let maxLW = 0; for (const l of lines) maxLW = Math.max(maxLW, ctx.measureText(l).width); const boxW = a.w ? a.w * scale : maxLW; ctx.fillStyle = "rgba(255,255,255,0.82)"; ctx.fillRect(a.x * scale - 2, a.y * scale - 1, boxW + 4, textH + 2); ctx.fillStyle = a.color; const align = a.textAlign || "justify"; for (let li = 0; li < lines.length; li++) { const lw = ctx.measureText(lines[li]).width; const dx = align === "center" ? (boxW - lw) / 2 : align === "right" ? boxW - lw : 0; ctx.fillText(lines[li], a.x * scale + dx, a.y * scale + li * (fs * 1.4)); } }
           else if (a.type === "wavy" && a.x != null && a.y != null && a.endX != null) { ctx.beginPath(); let wx = Math.min(a.x, a.endX) * scale; const mx = Math.max(a.x, a.endX) * scale; const wy = a.y * scale; ctx.moveTo(wx, wy); const step = 16 * scale; while (wx < mx) { ctx.quadraticCurveTo(wx + step * 0.25, wy - 5 * scale, wx + step * 0.5, wy); ctx.quadraticCurveTo(wx + step * 0.75, wy + 5 * scale, wx + step, wy); wx += step; } ctx.stroke(); }
         }
         m.toBlob(blob => resolve(blob), "image/png");
@@ -768,28 +762,15 @@ export default function Home() {
                     <input type="color" value={strokeColor} onChange={e => setStrokeColor(e.target.value)} title="自定义颜色" style={{ width: 22, height: 22, border: "none", padding: 0, cursor: "pointer", borderRadius: 4, flexShrink: 0 }} />
                     <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
                     <input type="number" min={8} max={72} value={fontSize} onChange={e => { const v = Number(e.target.value); if (v >= 8 && v <= 72) { setFontSize(v); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], fontSize: v }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } } }} style={{ width: 44, padding: "4px 2px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, textAlign: "center", outline: "none", flexShrink: 0 }} title="字号" />
-                    <div style={{ position: "relative", flexShrink: 0 }} onMouseEnter={() => setShowAlignMenu(true)} onMouseLeave={() => setShowAlignMenu(false)}>
-                      <button title="文字对齐" style={{ width: 36, height: 36, borderRadius: 8, border: showAlignMenu ? "1px solid " + PRIMARY : "1px solid #E0E0DC", cursor: "pointer", background: showAlignMenu ? PRIMARY_LIGHT : "#fff", color: showAlignMenu ? PRIMARY : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" }}>
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">{textAlign === "left" ? <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="14" height="2" rx="1" fill="currentColor"/></> : textAlign === "center" ? <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="3" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="14" height="2" rx="1" fill="currentColor"/></> : textAlign === "right" ? <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="6" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="2" y="11" width="14" height="2" rx="1" fill="currentColor"/></> : <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="16" height="2" rx="1" fill="currentColor"/></>}</svg>
+                    {([["left", <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="14" height="2" rx="1" fill="currentColor"/></>],
+                      ["center", <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="3" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="14" height="2" rx="1" fill="currentColor"/></>],
+                      ["right", <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="6" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="2" y="11" width="14" height="2" rx="1" fill="currentColor"/></>],
+                      ["justify", <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="16" height="2" rx="1" fill="currentColor"/></>]
+                    ] as [typeof textAlign, React.ReactNode][]).map(([al, icon]) => (
+                      <button key={al} onClick={() => { setTextAlign(al); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], textAlign: al }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } }} style={{ width: 32, height: 32, borderRadius: 6, border: "none", cursor: "pointer", background: textAlign === al ? PRIMARY_LIGHT : "transparent", color: textAlign === al ? PRIMARY : "#9CA3AF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.1s" }}>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">{icon}</svg>
                       </button>
-                      {showAlignMenu && <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", paddingTop: 4, zIndex: 50 }}>
-                        <div style={{ background: "#fff", borderRadius: 8, border: "1px solid #E0E0DC", boxShadow: "0 4px 16px rgba(0,0,0,0.1)", padding: 4, display: "flex", gap: 2 }}>
-                        {([["left", <>
-                          <rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="14" height="2" rx="1" fill="currentColor"/>
-                        </>], ["center", <>
-                          <rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="3" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="14" height="2" rx="1" fill="currentColor"/>
-                        </>], ["right", <>
-                          <rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="6" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="2" y="11" width="14" height="2" rx="1" fill="currentColor"/>
-                        </>], ["justify", <>
-                          <rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="16" height="2" rx="1" fill="currentColor"/>
-                        </>]] as [typeof textAlign, React.ReactNode][]).map(([al, icon]) => (
-                          <button key={al} onMouseDown={e => { e.preventDefault(); setTextAlign(al); setShowAlignMenu(false); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], textAlign: al }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } }} style={{ width: 34, height: 34, borderRadius: 6, border: "none", cursor: "pointer", background: textAlign === al ? PRIMARY_LIGHT : "transparent", color: textAlign === al ? PRIMARY : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">{icon}</svg>
-                          </button>
-                        ))}
-                        </div>
-                      </div>}
-                    </div>
+                    ))}
                     <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
                     <button onClick={exportPNG} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>导出</button>
                     <button onClick={copyImageToClipboard} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>复制</button>

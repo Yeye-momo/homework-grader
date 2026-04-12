@@ -141,9 +141,6 @@ export default function Home() {
   const [archiveHistOpen, setArchiveHistOpen] = useState(false);
   const [expandedArchiveId, setExpandedArchiveId] = useState<string | null>(null);
   const [archiveDetailId, setArchiveDetailId] = useState<string | null>(null);
-  const [splitPercent, setSplitPercent] = useState(58);
-  const splitDragging = useRef(false);
-  const splitContainerRef = useRef<HTMLDivElement>(null);
 
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -176,12 +173,6 @@ export default function Home() {
   }
   function setPadVal(idx: number, newVal: number) { setPadFn(idx, () => newVal); }
   function resetPad() { const cur = padMap[pk] || [0,0,0,0]; shiftAnnotations(-cur[2], -cur[0]); setPadMap(prev => ({ ...prev, [pk]: [0,0,0,0] })); }
-  function onSplitMouseDown(e: React.MouseEvent) {
-    e.preventDefault(); splitDragging.current = true;
-    const onMove = (ev: MouseEvent) => { if (!splitDragging.current || !splitContainerRef.current) return; const rect = splitContainerRef.current.getBoundingClientRect(); const pct = Math.max(30, Math.min(80, ((ev.clientX - rect.left) / rect.width) * 100)); setSplitPercent(Math.round(pct)); };
-    const onUp = () => { splitDragging.current = false; document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); document.body.style.cursor = ""; document.body.style.userSelect = ""; };
-    document.addEventListener("mousemove", onMove); document.addEventListener("mouseup", onUp); document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none";
-  }
 
   const [initDone, setInitDone] = useState(false);
   useEffect(() => {
@@ -962,8 +953,8 @@ export default function Home() {
             <p style={{ fontSize: 16, fontWeight: 600, color: RED, marginBottom: 8 }}>{activeStudent.name} 批改出错</p>
             <p style={{ fontSize: 13, color: "#D1D5DB" }}>{activeStudent.errorMsg || "请在「上传作业」页面重试"}</p>
           </div>}
-          {activeStudent?.status === "done" && <div ref={splitContainerRef} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
-            <div style={{ flex: isMobile ? "auto" : `0 0 ${splitPercent}%`, display: "flex", flexDirection: "column" }}>
+          {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
+            <div style={{ flex: isMobile ? "auto" : "0 0 58%", display: "flex", flexDirection: "column", resize: isMobile ? "none" : "horizontal", overflow: "auto", minWidth: isMobile ? "auto" : "30%", maxWidth: isMobile ? "none" : "80%" }}>
               <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
                 <div style={{ position: "sticky", top: 0, zIndex: 20, padding: "4px 6px", display: "flex", flexDirection: "column", gap: 3 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", flexWrap: "nowrap", overflowX: "auto" }}>
@@ -1014,16 +1005,7 @@ export default function Home() {
                 </div>}
               </div>
               {activeStudent.imageUrls.length > 1 && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "4px 0" }}><button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>← 上一页</button><span style={{ fontSize: 11, color: "#6B7280" }}>{"第 " + (pageIndex + 1) + " / " + activeStudent.imageUrls.length + " 页"}</span><button disabled={pageIndex >= activeStudent.imageUrls.length - 1} onClick={() => setPageIndex(i => i + 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>下一页 →</button></div>}
-              <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, padding: "4px 0" }}>
-                <span style={{ fontSize: 10, color: "#9CA3AF" }}>宽度</span>
-                <input type="range" min={30} max={80} value={splitPercent} onChange={e => setSplitPercent(Number(e.target.value))} style={{ width: 80, height: 14, cursor: "pointer", accentColor: PRIMARY }} />
-                <span style={{ fontSize: 10, color: "#9CA3AF", minWidth: 28 }}>{splitPercent}%</span>
-                {splitPercent !== 58 && <button onClick={() => setSplitPercent(58)} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", color: "#9CA3AF", fontSize: 10 }}>重置</button>}
-              </div>
             </div>
-
-            {/* Draggable split divider */}
-            {!isMobile && <div onMouseDown={onSplitMouseDown} style={{ width: 6, flexShrink: 0, cursor: "col-resize", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseEnter={e => { e.currentTarget.style.background = "#D1D5DB44"; }} onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}><div style={{ width: 2, height: 40, borderRadius: 2, background: "#D1D5DB" }} /></div>}
 
             <div style={{ flex: 1, minWidth: 0, overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 100px)", padding: "0 12px" }}>
               {activeStudent.essayDetail ? <>

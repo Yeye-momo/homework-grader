@@ -6,8 +6,26 @@ type Tool = "pen" | "text" | "circle" | "wavy" | "eraser" | "hand" | "penEraser"
 interface Student { id: string; name: string; className: string; images: File[]; imageUrls: string[]; ocrText: string; essayDetail: any | null; report: string; status: "idle" | "grading" | "done" | "error"; errorMsg?: string; archived?: boolean; history?: { date: string; topic: string; grade: string; essayDetail: any; imageUrls: string[] }[]; }
 interface DrawAction { type: "pen" | "text" | "circle" | "wavy"; color: string; lineWidth: number; points?: { x: number; y: number }[]; x?: number; y?: number; w?: number; h?: number; endX?: number; text?: string; fontSize?: number; textAlign?: "left" | "center" | "right" | "justify"; }
 
+interface ToolLink { id: string; name: string; url: string; desc?: string; icon?: string; }
+
 const PRIMARY = "#2D4A3E", PRIMARY_LIGHT = "#E8EEEB", PRIMARY_MID = "#C2D1CA", RED = "#9B4D46", GREEN = "#5A8A6A", ORANGE = "#B8865C", BG = "#FAFAF8";
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+const DEFAULT_AWARD_SITES: ToolLink[] = [
+  { id: "aa", name: "AA教育奖状", url: "https://aakit.cn/jiangzhuang/", desc: "专为班级设计，支持批量生成，免费无需注册", icon: "🏫" },
+  { id: "lddgo", name: "老董奖状生成器", url: "https://www.lddgo.net/image/certificate-generate", desc: "支持自定义模板和背景图片上传", icon: "🎨" },
+  { id: "jiling", name: "记灵工具", url: "https://remeins.com/index/app/award", desc: "全部免费，快速生成专业奖状", icon: "⚡" },
+  { id: "33tool", name: "蜻蜓奖状生成器", url: "https://33tool.com/maker_cert/", desc: "支持批量模式，可直接复制到微信", icon: "🦋" },
+  { id: "canva", name: "Canva可画", url: "https://www.canva.cn/create/awards/", desc: "海量精美模板，拖拽编辑（需注册）", icon: "✨" },
+  { id: "gaoding", name: "稿定设计", url: "https://www.gaoding.com/features/prize-certificate-generator", desc: "专业设计工具，丰富模板", icon: "🎖" },
+];
+
+const DEFAULT_TOOLBOX: ToolLink[] = [
+  { id: "tb_田字格", name: "田字格字帖生成", url: "https://remeins.com/index/app/tianzige", desc: "在线生成田字格练字帖", icon: "📝" },
+  { id: "tb_拼音", name: "汉字注音工具", url: "https://www.lddgo.net/string/pinyin", desc: "汉字自动注拼音", icon: "🔤" },
+  { id: "tb_朗读", name: "文字转语音", url: "https://remeins.com/index/app/tts", desc: "课文朗读生成", icon: "🔊" },
+  { id: "tb_词典", name: "成语词典", url: "https://www.zdic.net/cd/", desc: "在线成语查询", icon: "📖" },
+];
 const QUICK_STAMPS = [
   { label: "好词✓", color: RED }, { label: "好句✓", color: RED }, { label: "精彩!", color: RED },
   { label: "改", color: RED }, { label: "错字", color: RED }, { label: "?", color: ORANGE },
@@ -112,11 +130,13 @@ export default function Home() {
   const [customEpFast, setCustomEpFast] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAward, setShowAward] = useState(false);
-  const [awardTemplate, setAwardTemplate] = useState(0);
-  const [awardTitle, setAwardTitle] = useState("作文之星");
-  const [awardName, setAwardName] = useState("");
-  const [awardReason, setAwardReason] = useState("");
-  const [awardTeacher, setAwardTeacher] = useState("");
+  const [showToolbox, setShowToolbox] = useState(false);
+  const [toolboxItems, setToolboxItems] = useState<ToolLink[]>(DEFAULT_TOOLBOX);
+  const [tbAddName, setTbAddName] = useState("");
+  const [tbAddUrl, setTbAddUrl] = useState("");
+  const [tbAddDesc, setTbAddDesc] = useState("");
+  const [tbAddIcon, setTbAddIcon] = useState("🔗");
+  const [tbEditing, setTbEditing] = useState(false);
   const [expandedArchiveId, setExpandedArchiveId] = useState<string | null>(null);
   const [archiveDetailId, setArchiveDetailId] = useState<string | null>(null);
 
@@ -171,6 +191,7 @@ export default function Home() {
         if (apiSettings.apiKey) setCustomApiKey(apiSettings.apiKey);
         if (apiSettings.epPro) setCustomEpPro(apiSettings.epPro);
         if (apiSettings.epFast) setCustomEpFast(apiSettings.epFast);
+        try { const tb = JSON.parse(localStorage.getItem("hw_toolbox") || "[]"); if (tb.length > 0) setToolboxItems(tb); } catch {}
         let pending = 0;
         loaded.forEach((s: any) => {
           const imgCount = s._savedImgCount || 0;
@@ -206,6 +227,7 @@ export default function Home() {
       localStorage.setItem("hw_grader_v8", JSON.stringify(data));
     } catch {}
   }, [students, activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText, modelImageUrls, classNames, currentClass, tab, initDone]);
+  useEffect(() => { if (initDone) { try { localStorage.setItem("hw_toolbox", JSON.stringify(toolboxItems)); } catch {} } }, [toolboxItems, initDone]);
 
   function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
     const out: string[] = [];
@@ -556,78 +578,16 @@ export default function Home() {
   function copyAllDetail() { if (!activeStudent?.essayDetail) return; const d = activeStudent.essayDetail; let t = `【${activeStudent.name} 作文批改】\n\n━━ 批注 ━━\n`; (d.corrections || []).forEach((c: any, i: number) => { t += `${i + 1}. [${c.paragraph}] ${c.text}${c.suggested ? " → " + c.suggested : ""}\n`; }); if (d.model_suggestions?.length > 0) { t += `\n━━ 范文对比建议 ━━\n`; d.model_suggestions.forEach((s: any, i: number) => { t += `${i + 1}. [${s.paragraph}] ${s.suggestion}\n`; }); } t += `\n━━ 亮点 ━━\n`; (d.highlights || []).forEach((h: any, i: number) => { t += `${i + 1}. ${h.title}：${h.description}\n`; }); if (d.teacher_comment) t += `\n━━ 教师总评 ━━\n${d.teacher_comment}\n`; if (d.improvement_tips) { t += `\n━━ 改进方向 ━━\n`; d.improvement_tips.forEach((tip: string) => t += `${tip}\n`); } clipCopy(t, "已复制全部"); }
   function generateParentNotice() { if (!activeStudent?.essayDetail) return; const d = activeStudent.essayDetail; const name = activeStudent.name; let t = `【${name}作文反馈】\n✨ 亮点：${(d.highlights || []).map((h: any) => h.title).join("、")}\n📝 需改进${(d.corrections || []).filter((c: any) => c.type === "fix").length}处，已在作文上标注\n`; if (d.teacher_comment) t += `💬 ${d.teacher_comment}\n`; t += `请家长督促孩子看批注并改正，感谢配合！`; setParentNotice(t); }
 
-  const awardCanvasRef = useRef<HTMLCanvasElement>(null);
-  const AWARD_TEMPLATES = [
-    { name: "经典红金", bg: ["#DC2626","#F59E0B"], border: "#C8A35A", titleColor: "#8B0000", textColor: "#4A1A00", accent: "#D4A017" },
-    { name: "清新绿", bg: ["#065F46","#10B981"], border: "#2D8C5A", titleColor: "#064E3B", textColor: "#1F4037", accent: "#34D399" },
-    { name: "蓝色庄重", bg: ["#1E3A5F","#3B82F6"], border: "#4A7AB5", titleColor: "#1E3A8A", textColor: "#1E293B", accent: "#60A5FA" },
-    { name: "紫金尊贵", bg: ["#581C87","#A855F7"], border: "#9333EA", titleColor: "#4C1D95", textColor: "#3B0764", accent: "#C084FC" },
-  ];
-  function openAwardModal() {
-    if (!activeStudent?.essayDetail) return;
-    const d = activeStudent.essayDetail;
-    const hl = (d.highlights || []).map((h: any) => h.title).slice(0, 3);
-    setAwardName(activeStudent.name);
-    setAwardReason(hl.length > 0 ? "在本次作文中" + hl.join("、") + "，表现优异！" : "在本次作文中表现优异，特此表彰！");
-    if (!awardTeacher) setAwardTeacher("");
-    setShowAward(true);
-    setTimeout(() => drawAward(), 100);
+  function addToolboxItem() {
+    if (!tbAddName.trim() || !tbAddUrl.trim()) return;
+    let url = tbAddUrl.trim();
+    if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://" + url;
+    const item: ToolLink = { id: uid(), name: tbAddName.trim(), url, desc: tbAddDesc.trim() || undefined, icon: tbAddIcon || "🔗" };
+    setToolboxItems(prev => [...prev, item]);
+    setTbAddName(""); setTbAddUrl(""); setTbAddDesc(""); setTbAddIcon("🔗");
   }
-  function drawAward() {
-    const cv = awardCanvasRef.current; if (!cv) return;
-    const ctx = cv.getContext("2d"); if (!ctx) return;
-    const W = 900, H = 620; cv.width = W; cv.height = H;
-    const t = AWARD_TEMPLATES[awardTemplate] || AWARD_TEMPLATES[0];
-    const grd = ctx.createLinearGradient(0, 0, W, H);
-    grd.addColorStop(0, t.bg[0]); grd.addColorStop(1, t.bg[1]);
-    ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
-    const m = 30;
-    ctx.fillStyle = "rgba(255,255,248,0.92)";
-    ctx.beginPath();
-    const r = 12; ctx.moveTo(m + r, m); ctx.lineTo(W - m - r, m); ctx.arcTo(W - m, m, W - m, m + r, r); ctx.lineTo(W - m, H - m - r); ctx.arcTo(W - m, H - m, W - m - r, H - m, r); ctx.lineTo(m + r, H - m); ctx.arcTo(m, H - m, m, H - m - r, r); ctx.lineTo(m, m + r); ctx.arcTo(m, m, m + r, m, r); ctx.fill();
-    ctx.strokeStyle = t.border; ctx.lineWidth = 3; ctx.strokeRect(m + 10, m + 10, W - m * 2 - 20, H - m * 2 - 20);
-    ctx.strokeStyle = t.border + "66"; ctx.lineWidth = 1; ctx.strokeRect(m + 16, m + 16, W - m * 2 - 32, H - m * 2 - 32);
-    const cSize = 20;
-    ([[m + 14, m + 14], [W - m - 14, m + 14], [m + 14, H - m - 14], [W - m - 14, H - m - 14]] as [number, number][]).forEach(([cx, cy]) => {
-      ctx.save(); ctx.translate(cx, cy);
-      ctx.strokeStyle = t.border; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(-cSize, 0); ctx.lineTo(0, 0); ctx.lineTo(0, -cSize); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cSize, 0); ctx.lineTo(0, 0); ctx.lineTo(0, cSize); ctx.stroke();
-      ctx.fillStyle = t.accent; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    });
-    ctx.strokeStyle = t.border; ctx.lineWidth = 1;
-    const topY = m + 50;
-    ctx.beginPath(); ctx.moveTo(m + 60, topY); ctx.lineTo(W / 2 - 80, topY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(W / 2 + 80, topY); ctx.lineTo(W - m - 60, topY); ctx.stroke();
-    ctx.fillStyle = t.accent; ctx.font = "28px serif"; ctx.textAlign = "center";
-    ctx.fillText("✦", W / 2 - 50, topY + 8); ctx.fillText("✦", W / 2, topY + 8); ctx.fillText("✦", W / 2 + 50, topY + 8);
-    ctx.fillStyle = t.titleColor; ctx.font = "bold 52px 'Noto Sans SC','Microsoft YaHei',serif";
-    ctx.textAlign = "center"; ctx.fillText(awardTitle, W / 2, topY + 75);
-    ctx.strokeStyle = t.border; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(W / 2 - 120, topY + 90); ctx.lineTo(W / 2 + 120, topY + 90); ctx.stroke();
-    ctx.fillStyle = t.textColor; ctx.font = "bold 26px 'Noto Sans SC','Microsoft YaHei',sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText(awardName + " 同学：", m + 80, topY + 145);
-    ctx.font = "22px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = t.textColor;
-    const maxTW = W - m * 2 - 160; let rLine = ""; const rLines: string[] = [];
-    for (const ch of awardReason) { if (ctx.measureText(rLine + ch).width > maxTW) { rLines.push(rLine); rLine = ch; } else rLine += ch; }
-    if (rLine) rLines.push(rLine);
-    for (let i = 0; i < rLines.length; i++) ctx.fillText(rLines[i], m + 80, topY + 190 + i * 38);
-    ctx.fillStyle = t.textColor; ctx.font = "italic 20px 'Noto Sans SC','Microsoft YaHei',sans-serif";
-    ctx.textAlign = "left"; ctx.fillText("特发此状，以资鼓励。", m + 80, H - m - 110);
-    ctx.textAlign = "right"; ctx.font = "20px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = t.textColor;
-    if (awardTeacher) ctx.fillText(awardTeacher, W - m - 70, H - m - 75);
-    ctx.fillText(new Date().toLocaleDateString("zh-CN"), W - m - 70, H - m - 45);
-    ctx.save(); ctx.translate(W - m - 130, H - m - 100);
-    ctx.strokeStyle = t.accent + "99"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, 0, 32, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = t.accent + "99"; ctx.font = "bold 13px 'Noto Sans SC',sans-serif"; ctx.textAlign = "center"; ctx.fillText("优秀", 0, -4); ctx.fillText("作文", 0, 14);
-    ctx.restore();
-  }
-  function downloadAward() {
-    const cv = awardCanvasRef.current; if (!cv) return;
-    const link = document.createElement("a"); link.download = "奖状_" + awardName + ".png"; link.href = cv.toDataURL("image/png"); link.click();
-  }
+  function removeToolboxItem(id: string) { setToolboxItems(prev => prev.filter(t => t.id !== id)); }
+  function resetToolbox() { setToolboxItems(DEFAULT_TOOLBOX); }
 
   function toggleBatchSelect(id: string) { setSelectedForBatch(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
   function selectAllForBatch() { const ids = classStudents.map(s => s.id); setSelectedForBatch(new Set(ids)); }
@@ -653,28 +613,94 @@ export default function Home() {
       {copyMsg && <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: GREEN, color: "#fff", padding: "8px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>{copyMsg}</div>}
       {parentNotice && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 420, width: "90%" }}><h3 style={{ marginBottom: 12 }}>家长通知</h3><pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, background: "#f9f9f9", padding: 12, borderRadius: 8 }}>{parentNotice}</pre><div style={{ display: "flex", gap: 8, marginTop: 12 }}><button onClick={() => { clipCopy(parentNotice, "已复制通知"); }} style={{ flex: 1, padding: 8, borderRadius: 6, border: "none", background: GREEN, color: "#fff", cursor: "pointer", fontWeight: 600 }}>复制</button><button onClick={() => setParentNotice(null)} style={{ flex: 1, padding: 8, borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>关闭</button></div></div></div>}
 
-      {/* Award Modal */}
-      {showAward && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowAward(false)}>
-        <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 920, width: "95%", maxHeight: "90vh", overflow: "auto" }}>
+      {/* Award Links Modal */}
+      {showAward && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowAward(false)}>
+        <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 520, width: "95%", maxHeight: "85vh", overflow: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>🏆 生成奖状</h3>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>🏆 奖状生成工具</h3>
             <button onClick={() => setShowAward(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8E4", background: "#fff", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>✕</button>
           </div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            {AWARD_TEMPLATES.map((t, i) => (
-              <button key={i} onClick={() => { setAwardTemplate(i); setTimeout(drawAward, 50); }} style={{ padding: "6px 14px", borderRadius: 6, border: awardTemplate === i ? "2px solid " + t.border : "1px solid #E0E0DC", background: awardTemplate === i ? `linear-gradient(135deg, ${t.bg[0]}22, ${t.bg[1]}22)` : "#fff", color: awardTemplate === i ? t.border : "#6B7280", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t.name}</button>
+          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 16px", lineHeight: 1.6 }}>推荐使用以下专业在线奖状生成器，模板丰富、效果精美，点击即可跳转使用：</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {DEFAULT_AWARD_SITES.map(site => (
+              <a key={site.id} href={site.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#fff", textDecoration: "none", color: "#374151", transition: "all 0.15s", cursor: "pointer" }} onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = PRIMARY_MID; (e.currentTarget as HTMLAnchorElement).style.background = PRIMARY_LIGHT; }} onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#E8E8E4"; (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}>
+                <span style={{ fontSize: 28, flexShrink: 0, width: 40, textAlign: "center" }}>{site.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{site.name}</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 11, color: "#9CA3AF", lineHeight: 1.4 }}>{site.desc}</p>
+                </div>
+                <span style={{ fontSize: 16, color: "#D1D5DB", flexShrink: 0 }}>→</span>
+              </a>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-            <div><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>奖项名称</label><input value={awardTitle} onChange={e => setAwardTitle(e.target.value)} style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
-            <div><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>学生姓名</label><input value={awardName} onChange={e => setAwardName(e.target.value)} style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
-            <div style={{ gridColumn: "1 / -1" }}><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>获奖理由</label><textarea value={awardReason} onChange={e => setAwardReason(e.target.value)} rows={2} style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} /></div>
-            <div><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>颁发人</label><input value={awardTeacher} onChange={e => setAwardTeacher(e.target.value)} placeholder="如：XX老师" style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
+        </div>
+      </div>}
+
+      {/* Toolbox Modal */}
+      {showToolbox && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowToolbox(false)}>
+        <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 520, width: "95%", maxHeight: "85vh", overflow: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>🧰 教师工具箱</h3>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button onClick={() => setTbEditing(!tbEditing)} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid #E0E0DC", background: tbEditing ? PRIMARY_LIGHT : "#fff", color: tbEditing ? PRIMARY : "#6B7280", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{tbEditing ? "完成" : "编辑"}</button>
+              <button onClick={() => setShowToolbox(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8E4", background: "#fff", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>✕</button>
+            </div>
           </div>
-          <canvas ref={awardCanvasRef} style={{ width: "100%", borderRadius: 8, border: "1px solid #eee" }} />
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <button onClick={drawAward} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: ORANGE, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>刷新预览</button>
-            <button onClick={downloadAward} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>下载奖状</button>
+          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 12px", lineHeight: 1.6 }}>收藏常用教学工具和网站，点击即可跳转。可自由添加和管理。</p>
+
+          {/* Tool list */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+            {toolboxItems.length === 0 && <p style={{ textAlign: "center", color: "#D1D5DB", padding: "20px 0", fontSize: 13 }}>工具箱是空的，点击下方添加常用工具</p>}
+            {toolboxItems.map(item => (
+              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#fff", textDecoration: "none", color: "#374151", transition: "all 0.15s", cursor: "pointer" }} onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = PRIMARY_MID; (e.currentTarget as HTMLAnchorElement).style.background = PRIMARY_LIGHT; }} onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#E8E8E4"; (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}>
+                  <span style={{ fontSize: 22, flexShrink: 0, width: 32, textAlign: "center" }}>{item.icon || "🔗"}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{item.name}</p>
+                    {item.desc && <p style={{ margin: "2px 0 0", fontSize: 11, color: "#9CA3AF", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.desc}</p>}
+                  </div>
+                  <span style={{ fontSize: 14, color: "#D1D5DB", flexShrink: 0 }}>→</span>
+                </a>
+                {tbEditing && <button onClick={() => removeToolboxItem(item.id)} style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid #FECACA", background: "#FEF2F2", color: RED, fontSize: 12, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>}
+              </div>
+            ))}
+          </div>
+
+          {/* Quick add section */}
+          <div style={{ padding: 16, borderRadius: 10, border: "1px dashed #D1D5DB", background: "#FAFAF8" }}>
+            <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#374151" }}>添加自定义工具</p>
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "8px 10px", alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>图标</span>
+              <div style={{ display: "flex", gap: 4 }}>
+                {["🔗", "📝", "📖", "🎯", "💡", "🔍", "📊", "🎨"].map(ic => (
+                  <button key={ic} onClick={() => setTbAddIcon(ic)} style={{ width: 30, height: 30, borderRadius: 6, border: tbAddIcon === ic ? "2px solid " + PRIMARY : "1px solid #E0E0DC", background: tbAddIcon === ic ? PRIMARY_LIGHT : "#fff", cursor: "pointer", fontSize: 14 }}>{ic}</button>
+                ))}
+              </div>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>名称</span>
+              <input value={tbAddName} onChange={e => setTbAddName(e.target.value)} placeholder="如：古诗词查询" style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>链接</span>
+              <input value={tbAddUrl} onChange={e => setTbAddUrl(e.target.value)} placeholder="https://..." style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>说明</span>
+              <input value={tbAddDesc} onChange={e => setTbAddDesc(e.target.value)} placeholder="简短说明（选填）" style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button onClick={addToolboxItem} disabled={!tbAddName.trim() || !tbAddUrl.trim()} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", background: !tbAddName.trim() || !tbAddUrl.trim() ? "#D1D5DB" : PRIMARY, color: "#fff", fontSize: 13, fontWeight: 600, cursor: !tbAddName.trim() || !tbAddUrl.trim() ? "not-allowed" : "pointer" }}>添加到工具箱</button>
+              <button onClick={resetToolbox} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 12, cursor: "pointer" }}>恢复默认</button>
+            </div>
+          </div>
+
+          {/* Award section */}
+          <div style={{ marginTop: 16, padding: 16, borderRadius: 10, border: "1px solid #F0E0C0", background: "#FFF8ED" }}>
+            <p style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: ORANGE }}>🏆 奖状生成</p>
+            <p style={{ margin: "0 0 10px", fontSize: 12, color: "#9CA3AF", lineHeight: 1.5 }}>推荐使用专业在线工具制作精美奖状：</p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {DEFAULT_AWARD_SITES.slice(0, 4).map(site => (
+                <a key={site.id} href={site.url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 8, border: "1px solid #F0E0C0", background: "#fff", textDecoration: "none", fontSize: 12, fontWeight: 600, color: ORANGE, transition: "all 0.15s" }} onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "#FFF0DB"; }} onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}>
+                  <span>{site.icon}</span>{site.name}<span style={{ color: "#D1D5DB" }}>→</span>
+                </a>
+              ))}
+              <button onClick={() => { setShowToolbox(false); setShowAward(true); }} style={{ padding: "6px 12px", borderRadius: 8, border: "1px dashed #F0E0C0", background: "transparent", fontSize: 12, color: "#9CA3AF", cursor: "pointer" }}>查看全部...</button>
+            </div>
           </div>
         </div>
       </div>}
@@ -691,7 +717,7 @@ export default function Home() {
               <p style={{ margin: 0, fontSize: 13, lineHeight: 1.8, color: "#374151" }}>拍照上传小学语文作业，AI 自动识别手写文字并进行作文精批，生成修改建议、亮点分析和教师评语。</p>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 24 }}>
-              {[{ title: "OCR 识别", desc: "手写文字自动转文本" }, { title: "智能批改", desc: "AI 逐段精批+总评" }, { title: "图上标注", desc: "画笔、圆圈、文字批注" }, { title: "一键导出", desc: "批注图片直接下载" }].map((f, i) => (
+              {[{ title: "OCR 识别", desc: "手写文字自动转文本" }, { title: "智能批改", desc: "AI 逐段精批+总评" }, { title: "图上标注", desc: "画笔、圆圈、文字批注" }, { title: "教师工具箱", desc: "奖状·字帖·自定义工具" }].map((f, i) => (
                 <div key={i} style={{ padding: "14px 12px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#fff" }}><p style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 600, color: "#374151" }}>{f.title}</p><p style={{ margin: 0, fontSize: 11, color: "#9CA3AF" }}>{f.desc}</p></div>
               ))}
             </div>
@@ -723,7 +749,9 @@ export default function Home() {
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>6. 修改文字：</strong>双击已有文字可编辑，修改字号后点击空白处保存。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>7. 删除批注：</strong>鼠标靠近批注出现虚线框，按 Backspace/Delete 删除。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>8. 导出：</strong>点&ldquo;导出&rdquo;下载批注图片，点&ldquo;复制&rdquo;可直接粘贴到微信。</p>
-                <p style={{ margin: 0 }}><strong style={{ color: "#374151" }}>9. 快捷键：</strong>1-7 切换工具，Ctrl+Z 撤销，Ctrl+Y 重做，Esc 取消。</p>
+                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>9. 奖状：</strong>在批改详情页点&ldquo;🏆 奖状&rdquo;，跳转到专业在线奖状生成器制作精美奖状。</p>
+                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>10. 工具箱：</strong>点右上角 🧰 打开教师工具箱，收藏常用教学网站和工具，可自由添加、删除。</p>
+                <p style={{ margin: 0 }}><strong style={{ color: "#374151" }}>11. 快捷键：</strong>1-7 切换工具，Ctrl+Z 撤销，Ctrl+Y 重做，Esc 取消。</p>
               </div>
             </div>}
           </div>
@@ -738,6 +766,7 @@ export default function Home() {
           <button onClick={exportAllPNGs} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#374151", fontSize: isMobile ? 11 : 13, fontWeight: 500, cursor: "pointer" }}>导出图片</button>
           <button onClick={exportData} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#374151", fontSize: isMobile ? 11 : 13, fontWeight: 500, cursor: "pointer" }}>备份</button>
           <button onClick={() => importFileRef.current?.click()} style={{ padding: isMobile ? "6px 10px" : "8px 18px", borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#374151", fontSize: isMobile ? 11 : 13, fontWeight: 500, cursor: "pointer" }}>恢复</button>
+          <button onClick={() => setShowToolbox(true)} style={{ width: 36, height: 36, borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} title="工具箱">🧰</button>
           <button onClick={() => setShowSettings(true)} style={{ width: 36, height: 36, borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} title="设置">⚙</button>
           <input ref={importFileRef} type="file" accept=".json" onChange={importData} style={{ display: "none" }} />
         </div>
@@ -851,7 +880,7 @@ export default function Home() {
             <div style={{ display: "flex", gap: 6 }}>
               {activeStudent?.status === "done" && <button onClick={copyAllDetail} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>复制全部</button>}
               {activeStudent?.status === "done" && <button onClick={generateParentNotice} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>家长通知</button>}
-              {activeStudent?.status === "done" && <button onClick={openAwardModal} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + ORANGE, background: "transparent", color: ORANGE, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>🏆 奖状</button>}
+              {activeStudent?.status === "done" && <button onClick={() => setShowAward(true)} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + ORANGE, background: "transparent", color: ORANGE, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>🏆 奖状</button>}
             </div>
           </div>
           {!activeStudent && <div style={{ textAlign: "center", padding: "80px 20px" }}>

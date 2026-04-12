@@ -90,6 +90,11 @@ export default function Home() {
   const [splitPct, setSplitPct] = useState(58);
   const splitDragging = useRef(false);
   const splitContainerRef = useRef<HTMLDivElement>(null);
+  const [pageMaxWidth, setPageMaxWidth] = useState(100);
+  const [customStamps, setCustomStamps] = useState<{ label: string; color: string }[]>([...QUICK_STAMPS]);
+  const [stampEditing, setStampEditing] = useState(false);
+  const [stampAddLabel, setStampAddLabel] = useState("");
+  const [stampAddColor, setStampAddColor] = useState(RED);
   const [parentNotice, setParentNotice] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [globalDragOver, setGlobalDragOver] = useState(false);
@@ -197,6 +202,8 @@ export default function Home() {
         if (apiSettings.epPro) setCustomEpPro(apiSettings.epPro);
         if (apiSettings.epFast) setCustomEpFast(apiSettings.epFast);
         try { const tb = JSON.parse(localStorage.getItem("hw_toolbox") || "[]"); if (tb.length > 0) setToolboxItems(tb); } catch {}
+        try { const cs = JSON.parse(localStorage.getItem("hw_custom_stamps") || "[]"); if (cs.length > 0) setCustomStamps(cs); } catch {}
+        try { const pw = Number(localStorage.getItem("hw_page_max_width")); if (pw >= 50 && pw <= 100) setPageMaxWidth(pw); } catch {}
         let pending = 0;
         loaded.forEach((s: any) => {
           const imgCount = s._savedImgCount || 0;
@@ -233,6 +240,8 @@ export default function Home() {
     } catch {}
   }, [students, activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText, modelImageUrls, classNames, currentClass, tab, initDone]);
   useEffect(() => { if (initDone) { try { localStorage.setItem("hw_toolbox", JSON.stringify(toolboxItems)); } catch {} } }, [toolboxItems, initDone]);
+  useEffect(() => { if (initDone) { try { localStorage.setItem("hw_custom_stamps", JSON.stringify(customStamps)); } catch {} } }, [customStamps, initDone]);
+  useEffect(() => { if (initDone) { try { localStorage.setItem("hw_page_max_width", String(pageMaxWidth)); } catch {} } }, [pageMaxWidth, initDone]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -840,7 +849,7 @@ export default function Home() {
       </div>}
       {batchStatus && <div style={{ background: "#F0F7F2", padding: "10px 32px", fontSize: 14, fontWeight: 600, color: GREEN, borderBottom: "1px solid #D4E5D9" }}>{batchStatus}</div>}
 
-      <div style={{ maxWidth: tab === "detail" ? "none" : 1400, margin: "0 auto", padding: tab === "detail" ? "8px 12px" : "8px 20px" }}>
+      <div style={{ maxWidth: pageMaxWidth < 100 ? `${pageMaxWidth}vw` : "none", margin: "0 auto", padding: tab === "detail" ? "8px 12px" : "8px 20px", transition: "max-width 0.2s" }}>
         {tab !== "detail" && <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 10 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>}
 
         {tab === "upload" && (
@@ -997,9 +1006,20 @@ export default function Home() {
                     <button onClick={exportPNG} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>导出</button>
                     <button onClick={copyImageToClipboard} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>复制</button>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-                    {QUICK_STAMPS.map((s, i) => (<button key={i} onClick={() => { setPendingStamp(s); setStrokeColor(s.color); setMovingIdx(-1); }} style={{ flex: "1 1 0", padding: "4px 1px", borderRadius: 5, border: pendingStamp?.label === s.label ? "2px solid " + s.color : "1px solid #E8E8E4", background: pendingStamp?.label === s.label ? s.color + "15" : "#fff", color: s.color, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</button>))}
-                    {pendingStamp && <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0, whiteSpace: "nowrap" }}>← 放置</span>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", flexWrap: stampEditing ? "wrap" : "nowrap" }}>
+                    {customStamps.map((s, i) => (<div key={i} style={{ position: "relative", flex: stampEditing ? "none" : "1 1 0", minWidth: 0, display: "flex" }}>
+                      <button onClick={() => { if (!stampEditing) { setPendingStamp(s); setStrokeColor(s.color); setMovingIdx(-1); } }} style={{ flex: 1, padding: "4px 1px", borderRadius: 5, border: pendingStamp?.label === s.label && !stampEditing ? "2px solid " + s.color : "1px solid #E8E8E4", background: pendingStamp?.label === s.label && !stampEditing ? s.color + "15" : "#fff", color: s.color, fontSize: 12, fontWeight: 600, cursor: stampEditing ? "default" : "pointer", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</button>
+                      {stampEditing && <button onClick={() => setCustomStamps(prev => prev.filter((_, j) => j !== i))} style={{ position: "absolute", top: -6, right: -6, width: 16, height: 16, borderRadius: "50%", border: "none", background: RED, color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, padding: 0 }}>✕</button>}
+                    </div>))}
+                    {stampEditing && <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", width: "100%" }}>
+                      <input value={stampAddLabel} onChange={e => setStampAddLabel(e.target.value)} placeholder="新标语" style={{ width: 70, padding: "3px 6px", borderRadius: 4, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+                      <input type="color" value={stampAddColor} onChange={e => setStampAddColor(e.target.value)} style={{ width: 24, height: 24, border: "none", padding: 0, cursor: "pointer", borderRadius: 4 }} />
+                      <button onClick={() => { if (stampAddLabel.trim()) { setCustomStamps(prev => [...prev, { label: stampAddLabel.trim(), color: stampAddColor }]); setStampAddLabel(""); } }} style={{ padding: "3px 10px", borderRadius: 4, border: "none", background: GREEN, color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>添加</button>
+                      <button onClick={() => { setCustomStamps([...QUICK_STAMPS]); }} style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #E0E0DC", background: "#fff", fontSize: 11, cursor: "pointer", color: "#9CA3AF" }}>恢复默认</button>
+                    </div>}
+                    {pendingStamp && !stampEditing && <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0, whiteSpace: "nowrap" }}>← 放置</span>}
+                    <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 1px", flexShrink: 0 }} />
+                    <button onClick={() => setStampEditing(!stampEditing)} title="编辑标语" style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid " + (stampEditing ? PRIMARY : "#E0E0DC"), background: stampEditing ? PRIMARY_LIGHT : "transparent", color: stampEditing ? PRIMARY : "#9CA3AF", fontSize: 13, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>✎</button>
                     <div style={{ width: 1, height: 18, background: "#E0E0DC", margin: "0 1px", flexShrink: 0 }} />
                     <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>
                     {([["上", 0], ["下", 1], ["左", 2], ["右", 3]] as const).map(([label, idx]) => (
@@ -1155,6 +1175,11 @@ export default function Home() {
           })()}
         </div>}
       </div>
+      {!isMobile && <div style={{ position: "fixed", bottom: 16, right: 16, display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(8px)", borderRadius: 10, padding: "6px 14px", boxShadow: "0 2px 12px rgba(0,0,0,0.1)", border: "1px solid #E8E8E4", zIndex: 999 }}>
+        <span style={{ fontSize: 11, color: "#9CA3AF", whiteSpace: "nowrap" }}>宽度</span>
+        <input type="range" min={50} max={100} step={1} value={pageMaxWidth} onChange={e => setPageMaxWidth(Number(e.target.value))} style={{ width: 80, height: 14, cursor: "pointer", accentColor: PRIMARY }} />
+        <span style={{ fontSize: 11, color: PRIMARY, fontWeight: 600, minWidth: 32, textAlign: "center" }}>{pageMaxWidth}%</span>
+      </div>}
     </div>
   );
 }

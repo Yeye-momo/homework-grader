@@ -6,25 +6,22 @@ type Tool = "pen" | "text" | "circle" | "wavy" | "eraser" | "hand" | "penEraser"
 interface Student { id: string; name: string; className: string; images: File[]; imageUrls: string[]; ocrText: string; essayDetail: any | null; report: string; status: "idle" | "grading" | "done" | "error"; errorMsg?: string; archived?: boolean; history?: { date: string; topic: string; grade: string; essayDetail: any; imageUrls: string[] }[]; }
 interface DrawAction { type: "pen" | "text" | "circle" | "wavy"; color: string; lineWidth: number; points?: { x: number; y: number }[]; x?: number; y?: number; w?: number; h?: number; endX?: number; text?: string; fontSize?: number; textAlign?: "left" | "center" | "right" | "justify"; }
 
-interface ToolLink { id: string; name: string; url: string; desc?: string; icon?: string; }
+interface ToolLink { id: string; name: string; url: string; desc?: string; icon?: string; folder?: string; }
 
 const PRIMARY = "#2D4A3E", PRIMARY_LIGHT = "#E8EEEB", PRIMARY_MID = "#C2D1CA", RED = "#9B4D46", GREEN = "#5A8A6A", ORANGE = "#B8865C", BG = "#FAFAF8";
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
-const DEFAULT_AWARD_SITES: ToolLink[] = [
-  { id: "aa", name: "AA教育奖状", url: "https://aakit.cn/jiangzhuang/", desc: "专为班级设计，支持批量生成，免费无需注册", icon: "🏫" },
-  { id: "lddgo", name: "老董奖状生成器", url: "https://www.lddgo.net/image/certificate-generate", desc: "支持自定义模板和背景图片上传", icon: "🎨" },
-  { id: "jiling", name: "记灵工具", url: "https://remeins.com/index/app/award", desc: "全部免费，快速生成专业奖状", icon: "⚡" },
-  { id: "33tool", name: "蜻蜓奖状生成器", url: "https://33tool.com/maker_cert/", desc: "支持批量模式，可直接复制到微信", icon: "🦋" },
-  { id: "canva", name: "Canva可画", url: "https://www.canva.cn/create/awards/", desc: "海量精美模板，拖拽编辑（需注册）", icon: "✨" },
-  { id: "gaoding", name: "稿定设计", url: "https://www.gaoding.com/features/prize-certificate-generator", desc: "专业设计工具，丰富模板", icon: "🎖" },
-];
-
 const DEFAULT_TOOLBOX: ToolLink[] = [
-  { id: "tb_田字格", name: "田字格字帖生成", url: "https://remeins.com/index/app/tianzige", desc: "在线生成田字格练字帖", icon: "📝" },
-  { id: "tb_拼音", name: "汉字注音工具", url: "https://www.lddgo.net/string/pinyin", desc: "汉字自动注拼音", icon: "🔤" },
-  { id: "tb_朗读", name: "文字转语音", url: "https://remeins.com/index/app/tts", desc: "课文朗读生成", icon: "🔊" },
-  { id: "tb_词典", name: "成语词典", url: "https://www.zdic.net/cd/", desc: "在线成语查询", icon: "📖" },
+  { id: "aw_aa", name: "AA教育奖状", url: "https://aakit.cn/jiangzhuang/", desc: "专为班级设计，支持批量生成，免费无需注册", icon: "🏫", folder: "奖状生成" },
+  { id: "aw_lddgo", name: "老董奖状生成器", url: "https://www.lddgo.net/image/certificate-generate", desc: "支持自定义模板和背景图片上传", icon: "🎨", folder: "奖状生成" },
+  { id: "aw_jiling", name: "记灵工具", url: "https://remeins.com/index/app/award", desc: "全部免费，快速生成专业奖状", icon: "⚡", folder: "奖状生成" },
+  { id: "aw_33tool", name: "蜻蜓奖状生成器", url: "https://33tool.com/maker_cert/", desc: "支持批量模式，可直接复制到微信", icon: "🦋", folder: "奖状生成" },
+  { id: "aw_canva", name: "Canva可画", url: "https://www.canva.cn/create/awards/", desc: "海量精美模板，拖拽编辑（需注册）", icon: "✨", folder: "奖状生成" },
+  { id: "aw_gaoding", name: "稿定设计", url: "https://www.gaoding.com/features/prize-certificate-generator", desc: "专业设计工具，丰富模板", icon: "🎖", folder: "奖状生成" },
+  { id: "tb_田字格", name: "田字格字帖生成", url: "https://remeins.com/index/app/tianzige", desc: "在线生成田字格练字帖", icon: "📝", folder: "教学工具" },
+  { id: "tb_拼音", name: "汉字注音工具", url: "https://www.lddgo.net/string/pinyin", desc: "汉字自动注拼音", icon: "🔤", folder: "教学工具" },
+  { id: "tb_朗读", name: "文字转语音", url: "https://remeins.com/index/app/tts", desc: "课文朗读生成", icon: "🔊", folder: "教学工具" },
+  { id: "tb_词典", name: "成语词典", url: "https://www.zdic.net/cd/", desc: "在线成语查询", icon: "📖", folder: "教学工具" },
 ];
 const QUICK_STAMPS = [
   { label: "好词✓", color: RED }, { label: "好句✓", color: RED }, { label: "精彩!", color: RED },
@@ -136,9 +133,18 @@ export default function Home() {
   const [tbAddUrl, setTbAddUrl] = useState("");
   const [tbAddDesc, setTbAddDesc] = useState("");
   const [tbAddIcon, setTbAddIcon] = useState("🔗");
+  const [tbAddFolder, setTbAddFolder] = useState("");
   const [tbEditing, setTbEditing] = useState(false);
+  const [tbCollapsed, setTbCollapsed] = useState<Set<string>>(new Set());
+  const [tbNewFolder, setTbNewFolder] = useState("");
+  const [tbDragId, setTbDragId] = useState<string | null>(null);
+  const [archiveHistOpen, setArchiveHistOpen] = useState(false);
   const [expandedArchiveId, setExpandedArchiveId] = useState<string | null>(null);
   const [archiveDetailId, setArchiveDetailId] = useState<string | null>(null);
+  const [splitPercent, setSplitPercent] = useState(58);
+  const splitDragging = useRef(false);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const [canvasFit, setCanvasFit] = useState(false);
 
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -171,6 +177,12 @@ export default function Home() {
   }
   function setPadVal(idx: number, newVal: number) { setPadFn(idx, () => newVal); }
   function resetPad() { const cur = padMap[pk] || [0,0,0,0]; shiftAnnotations(-cur[2], -cur[0]); setPadMap(prev => ({ ...prev, [pk]: [0,0,0,0] })); }
+  function onSplitMouseDown(e: React.MouseEvent) {
+    e.preventDefault(); splitDragging.current = true;
+    const onMove = (ev: MouseEvent) => { if (!splitDragging.current || !splitContainerRef.current) return; const rect = splitContainerRef.current.getBoundingClientRect(); const pct = Math.max(30, Math.min(80, ((ev.clientX - rect.left) / rect.width) * 100)); setSplitPercent(Math.round(pct)); };
+    const onUp = () => { splitDragging.current = false; document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); document.body.style.cursor = ""; document.body.style.userSelect = ""; };
+    document.addEventListener("mousemove", onMove); document.addEventListener("mouseup", onUp); document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none";
+  }
 
   const [initDone, setInitDone] = useState(false);
   useEffect(() => {
@@ -582,12 +594,18 @@ export default function Home() {
     if (!tbAddName.trim() || !tbAddUrl.trim()) return;
     let url = tbAddUrl.trim();
     if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://" + url;
-    const item: ToolLink = { id: uid(), name: tbAddName.trim(), url, desc: tbAddDesc.trim() || undefined, icon: tbAddIcon || "🔗" };
+    const item: ToolLink = { id: uid(), name: tbAddName.trim(), url, desc: tbAddDesc.trim() || undefined, icon: tbAddIcon || "🔗", folder: tbAddFolder.trim() || undefined };
     setToolboxItems(prev => [...prev, item]);
     setTbAddName(""); setTbAddUrl(""); setTbAddDesc(""); setTbAddIcon("🔗");
   }
   function removeToolboxItem(id: string) { setToolboxItems(prev => prev.filter(t => t.id !== id)); }
-  function resetToolbox() { setToolboxItems(DEFAULT_TOOLBOX); }
+  function resetToolbox() { setToolboxItems(DEFAULT_TOOLBOX); setTbCollapsed(new Set()); }
+  function moveItemToFolder(itemId: string, folder: string) { setToolboxItems(prev => prev.map(t => t.id === itemId ? { ...t, folder: folder || undefined } : t)); }
+  function renameFolder(oldName: string, newName: string) { if (!newName.trim() || oldName === newName) return; setToolboxItems(prev => prev.map(t => t.folder === oldName ? { ...t, folder: newName.trim() } : t)); }
+  function deleteFolder(folderName: string) { setToolboxItems(prev => prev.map(t => t.folder === folderName ? { ...t, folder: undefined } : t)); }
+  function toggleFolderCollapse(f: string) { setTbCollapsed(prev => { const n = new Set(prev); if (n.has(f)) n.delete(f); else n.add(f); return n; }); }
+  function getToolboxFolders(): string[] { const folders = new Set<string>(); toolboxItems.forEach(t => { if (t.folder) folders.add(t.folder); }); return Array.from(folders); }
+  function deleteHistoryRecord(studentId: string, histIdx: number) { setStudents(prev => prev.map(s => { if (s.id !== studentId || !s.history) return s; const nh = s.history.filter((_, i) => i !== histIdx); return { ...s, history: nh }; })); }
 
   function toggleBatchSelect(id: string) { setSelectedForBatch(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
   function selectAllForBatch() { const ids = classStudents.map(s => s.id); setSelectedForBatch(new Set(ids)); }
@@ -617,12 +635,22 @@ export default function Home() {
       {showAward && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowAward(false)}>
         <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 520, width: "95%", maxHeight: "85vh", overflow: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>🏆 奖状生成工具</h3>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>奖状生成工具</h3>
             <button onClick={() => setShowAward(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8E4", background: "#fff", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>✕</button>
           </div>
           <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 16px", lineHeight: 1.6 }}>推荐使用以下专业在线奖状生成器，模板丰富、效果精美，点击即可跳转使用：</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {DEFAULT_AWARD_SITES.map(site => (
+            {toolboxItems.filter(t => t.folder === "奖状生成").map(site => (
+              <a key={site.id} href={site.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#fff", textDecoration: "none", color: "#374151", transition: "all 0.15s", cursor: "pointer" }} onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = PRIMARY_MID; (e.currentTarget as HTMLAnchorElement).style.background = PRIMARY_LIGHT; }} onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#E8E8E4"; (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}>
+                <span style={{ fontSize: 28, flexShrink: 0, width: 40, textAlign: "center" }}>{site.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{site.name}</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 11, color: "#9CA3AF", lineHeight: 1.4 }}>{site.desc}</p>
+                </div>
+                <span style={{ fontSize: 16, color: "#D1D5DB", flexShrink: 0 }}>→</span>
+              </a>
+            ))}
+            {toolboxItems.filter(t => t.folder === "奖状生成").length === 0 && DEFAULT_TOOLBOX.filter(t => t.folder === "奖状生成").map(site => (
               <a key={site.id} href={site.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#fff", textDecoration: "none", color: "#374151", transition: "all 0.15s", cursor: "pointer" }} onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = PRIMARY_MID; (e.currentTarget as HTMLAnchorElement).style.background = PRIMARY_LIGHT; }} onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#E8E8E4"; (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}>
                 <span style={{ fontSize: 28, flexShrink: 0, width: 40, textAlign: "center" }}>{site.icon}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -633,73 +661,104 @@ export default function Home() {
               </a>
             ))}
           </div>
+          <p style={{ fontSize: 11, color: "#9CA3AF", margin: "12px 0 0", textAlign: "center" }}>可在工具箱中管理和添加更多奖状工具</p>
         </div>
       </div>}
 
       {/* Toolbox Modal */}
       {showToolbox && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowToolbox(false)}>
-        <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 520, width: "95%", maxHeight: "85vh", overflow: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>🧰 教师工具箱</h3>
+        <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 560, width: "95%", maxHeight: "85vh", overflow: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>教师工具箱</h3>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <button onClick={() => setTbEditing(!tbEditing)} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid #E0E0DC", background: tbEditing ? PRIMARY_LIGHT : "#fff", color: tbEditing ? PRIMARY : "#6B7280", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{tbEditing ? "完成" : "编辑"}</button>
               <button onClick={() => setShowToolbox(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8E4", background: "#fff", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>✕</button>
             </div>
           </div>
-          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 12px", lineHeight: 1.6 }}>收藏常用教学工具和网站，点击即可跳转。可自由添加和管理。</p>
+          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 14px", lineHeight: 1.6 }}>收藏常用教学工具，按文件夹分类管理。拖拽工具到文件夹可归类。</p>
 
-          {/* Tool list */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
-            {toolboxItems.length === 0 && <p style={{ textAlign: "center", color: "#D1D5DB", padding: "20px 0", fontSize: 13 }}>工具箱是空的，点击下方添加常用工具</p>}
-            {toolboxItems.map(item => (
-              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#fff", textDecoration: "none", color: "#374151", transition: "all 0.15s", cursor: "pointer" }} onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = PRIMARY_MID; (e.currentTarget as HTMLAnchorElement).style.background = PRIMARY_LIGHT; }} onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#E8E8E4"; (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}>
-                  <span style={{ fontSize: 22, flexShrink: 0, width: 32, textAlign: "center" }}>{item.icon || "🔗"}</span>
+          {/* Folders */}
+          {(() => {
+            const folders = getToolboxFolders();
+            const ungrouped = toolboxItems.filter(t => !t.folder);
+            const renderItem = (item: ToolLink) => (
+              <div key={item.id} draggable={tbEditing} onDragStart={() => setTbDragId(item.id)} onDragEnd={() => setTbDragId(null)} style={{ display: "flex", alignItems: "center", gap: 8, opacity: tbDragId === item.id ? 0.4 : 1 }}>
+                <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: "1px solid #E8E8E4", background: "#fff", textDecoration: "none", color: "#374151", transition: "all 0.15s", cursor: tbEditing ? "grab" : "pointer" }} onMouseEnter={e => { if (!tbEditing) { (e.currentTarget as HTMLElement).style.borderColor = PRIMARY_MID; (e.currentTarget as HTMLElement).style.background = PRIMARY_LIGHT; } }} onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#E8E8E4"; (e.currentTarget as HTMLElement).style.background = "#fff"; }}>
+                  <span style={{ fontSize: 20, flexShrink: 0, width: 28, textAlign: "center" }}>{item.icon || "🔗"}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{item.name}</p>
-                    {item.desc && <p style={{ margin: "2px 0 0", fontSize: 11, color: "#9CA3AF", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.desc}</p>}
+                    {item.desc && <p style={{ margin: "1px 0 0", fontSize: 10, color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.desc}</p>}
                   </div>
-                  <span style={{ fontSize: 14, color: "#D1D5DB", flexShrink: 0 }}>→</span>
+                  <span style={{ fontSize: 12, color: "#D1D5DB", flexShrink: 0 }}>→</span>
                 </a>
-                {tbEditing && <button onClick={() => removeToolboxItem(item.id)} style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid #FECACA", background: "#FEF2F2", color: RED, fontSize: 12, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>}
+                {tbEditing && <button onClick={() => removeToolboxItem(item.id)} style={{ width: 24, height: 24, borderRadius: 6, border: "1px solid #FECACA", background: "#FEF2F2", color: RED, fontSize: 11, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>}
               </div>
-            ))}
-          </div>
+            );
+            return <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+              {folders.map(folder => {
+                const items = toolboxItems.filter(t => t.folder === folder);
+                const isOpen = !tbCollapsed.has(folder);
+                return <div key={folder} onDragOver={e => { e.preventDefault(); (e.currentTarget as HTMLElement).style.outline = "2px dashed " + PRIMARY_MID; }} onDragLeave={e => { (e.currentTarget as HTMLElement).style.outline = "none"; }} onDrop={e => { e.preventDefault(); (e.currentTarget as HTMLElement).style.outline = "none"; if (tbDragId) { moveItemToFolder(tbDragId, folder); setTbDragId(null); } }} style={{ borderRadius: 10, border: "1px solid #E8E8E4", overflow: "hidden" }}>
+                  <div onClick={() => toggleFolderCollapse(folder)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: PRIMARY_LIGHT, cursor: "pointer", userSelect: "none" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 14, transform: isOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s", display: "inline-block" }}>▶</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: PRIMARY }}>📁 {folder}</span>
+                      <span style={{ fontSize: 11, color: "#9CA3AF" }}>({items.length})</span>
+                    </div>
+                    {tbEditing && <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
+                      <button onClick={() => { const n = prompt("重命名文件夹", folder); if (n) renameFolder(folder, n); }} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", background: "#fff", fontSize: 10, cursor: "pointer", color: "#6B7280" }}>改名</button>
+                      <button onClick={() => { if (confirm("解散文件夹「" + folder + "」？工具将移到未分类")) deleteFolder(folder); }} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", fontSize: 10, cursor: "pointer", color: RED }}>解散</button>
+                    </div>}
+                  </div>
+                  {isOpen && <div style={{ padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6, background: "#FAFAF8" }}>
+                    {items.map(renderItem)}
+                  </div>}
+                </div>;
+              })}
+              {/* Ungrouped */}
+              {ungrouped.length > 0 && <div onDragOver={e => { e.preventDefault(); }} onDrop={e => { e.preventDefault(); if (tbDragId) { moveItemToFolder(tbDragId, ""); setTbDragId(null); } }}>
+                {folders.length > 0 && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "4px 0 6px", fontWeight: 600 }}>未分类</p>}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {ungrouped.map(renderItem)}
+                </div>
+              </div>}
+              {toolboxItems.length === 0 && <p style={{ textAlign: "center", color: "#D1D5DB", padding: "20px 0", fontSize: 13 }}>工具箱是空的，点击下方添加</p>}
+            </div>;
+          })()}
 
-          {/* Quick add section */}
-          <div style={{ padding: 16, borderRadius: 10, border: "1px dashed #D1D5DB", background: "#FAFAF8" }}>
-            <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#374151" }}>添加自定义工具</p>
-            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "8px 10px", alignItems: "center" }}>
+          {/* Add new folder */}
+          {tbEditing && <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            <input value={tbNewFolder} onChange={e => setTbNewFolder(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && tbNewFolder.trim()) { const existing = getToolboxFolders(); if (!existing.includes(tbNewFolder.trim())) { setToolboxItems(prev => [...prev, { id: uid(), name: "示例工具", url: "https://example.com", icon: "🔗", folder: tbNewFolder.trim(), desc: "点击编辑修改" }]); } setTbNewFolder(""); } }} placeholder="新建文件夹名称…" style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+            <button onClick={() => { if (tbNewFolder.trim()) { setToolboxItems(prev => [...prev, { id: uid(), name: "示例工具", url: "https://example.com", icon: "🔗", folder: tbNewFolder.trim(), desc: "点击编辑修改" }]); setTbNewFolder(""); } }} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #E0E0DC", background: "#fff", fontSize: 12, cursor: "pointer", color: "#6B7280", whiteSpace: "nowrap" }}>+ 文件夹</button>
+          </div>}
+
+          {/* Quick add */}
+          <div style={{ padding: 14, borderRadius: 10, border: "1px dashed #D1D5DB", background: "#FAFAF8" }}>
+            <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#374151" }}>添加工具</p>
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 10px", alignItems: "center" }}>
               <span style={{ fontSize: 12, color: "#9CA3AF" }}>图标</span>
-              <div style={{ display: "flex", gap: 4 }}>
-                {["🔗", "📝", "📖", "🎯", "💡", "🔍", "📊", "🎨"].map(ic => (
-                  <button key={ic} onClick={() => setTbAddIcon(ic)} style={{ width: 30, height: 30, borderRadius: 6, border: tbAddIcon === ic ? "2px solid " + PRIMARY : "1px solid #E0E0DC", background: tbAddIcon === ic ? PRIMARY_LIGHT : "#fff", cursor: "pointer", fontSize: 14 }}>{ic}</button>
+              <div style={{ display: "flex", gap: 3 }}>
+                {["🔗", "📝", "📖", "🎯", "💡", "🔍", "📊", "🎨", "🏆", "🎮"].map(ic => (
+                  <button key={ic} onClick={() => setTbAddIcon(ic)} style={{ width: 28, height: 28, borderRadius: 5, border: tbAddIcon === ic ? "2px solid " + PRIMARY : "1px solid #E0E0DC", background: tbAddIcon === ic ? PRIMARY_LIGHT : "#fff", cursor: "pointer", fontSize: 13 }}>{ic}</button>
                 ))}
               </div>
               <span style={{ fontSize: 12, color: "#9CA3AF" }}>名称</span>
-              <input value={tbAddName} onChange={e => setTbAddName(e.target.value)} placeholder="如：古诗词查询" style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+              <input value={tbAddName} onChange={e => setTbAddName(e.target.value)} placeholder="如：古诗词查询" style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
               <span style={{ fontSize: 12, color: "#9CA3AF" }}>链接</span>
-              <input value={tbAddUrl} onChange={e => setTbAddUrl(e.target.value)} placeholder="https://..." style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+              <input value={tbAddUrl} onChange={e => setTbAddUrl(e.target.value)} placeholder="https://..." style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
               <span style={{ fontSize: 12, color: "#9CA3AF" }}>说明</span>
-              <input value={tbAddDesc} onChange={e => setTbAddDesc(e.target.value)} placeholder="简短说明（选填）" style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+              <input value={tbAddDesc} onChange={e => setTbAddDesc(e.target.value)} placeholder="选填" style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>分类</span>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                <button onClick={() => setTbAddFolder("")} style={{ padding: "3px 10px", borderRadius: 5, border: !tbAddFolder ? "1px solid " + PRIMARY : "1px solid #E0E0DC", background: !tbAddFolder ? PRIMARY_LIGHT : "#fff", fontSize: 11, cursor: "pointer", color: !tbAddFolder ? PRIMARY : "#6B7280" }}>未分类</button>
+                {getToolboxFolders().map(f => (
+                  <button key={f} onClick={() => setTbAddFolder(f)} style={{ padding: "3px 10px", borderRadius: 5, border: tbAddFolder === f ? "1px solid " + PRIMARY : "1px solid #E0E0DC", background: tbAddFolder === f ? PRIMARY_LIGHT : "#fff", fontSize: 11, cursor: "pointer", color: tbAddFolder === f ? PRIMARY : "#6B7280" }}>{f}</button>
+                ))}
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <button onClick={addToolboxItem} disabled={!tbAddName.trim() || !tbAddUrl.trim()} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", background: !tbAddName.trim() || !tbAddUrl.trim() ? "#D1D5DB" : PRIMARY, color: "#fff", fontSize: 13, fontWeight: 600, cursor: !tbAddName.trim() || !tbAddUrl.trim() ? "not-allowed" : "pointer" }}>添加到工具箱</button>
-              <button onClick={resetToolbox} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 12, cursor: "pointer" }}>恢复默认</button>
-            </div>
-          </div>
-
-          {/* Award section */}
-          <div style={{ marginTop: 16, padding: 16, borderRadius: 10, border: "1px solid #F0E0C0", background: "#FFF8ED" }}>
-            <p style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: ORANGE }}>🏆 奖状生成</p>
-            <p style={{ margin: "0 0 10px", fontSize: 12, color: "#9CA3AF", lineHeight: 1.5 }}>推荐使用专业在线工具制作精美奖状：</p>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {DEFAULT_AWARD_SITES.slice(0, 4).map(site => (
-                <a key={site.id} href={site.url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 8, border: "1px solid #F0E0C0", background: "#fff", textDecoration: "none", fontSize: 12, fontWeight: 600, color: ORANGE, transition: "all 0.15s" }} onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "#FFF0DB"; }} onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}>
-                  <span>{site.icon}</span>{site.name}<span style={{ color: "#D1D5DB" }}>→</span>
-                </a>
-              ))}
-              <button onClick={() => { setShowToolbox(false); setShowAward(true); }} style={{ padding: "6px 12px", borderRadius: 8, border: "1px dashed #F0E0C0", background: "transparent", fontSize: 12, color: "#9CA3AF", cursor: "pointer" }}>查看全部...</button>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button onClick={addToolboxItem} disabled={!tbAddName.trim() || !tbAddUrl.trim()} style={{ flex: 1, padding: "7px 0", borderRadius: 8, border: "none", background: !tbAddName.trim() || !tbAddUrl.trim() ? "#D1D5DB" : PRIMARY, color: "#fff", fontSize: 13, fontWeight: 600, cursor: !tbAddName.trim() || !tbAddUrl.trim() ? "not-allowed" : "pointer" }}>添加</button>
+              <button onClick={resetToolbox} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 12, cursor: "pointer" }}>恢复默认</button>
             </div>
           </div>
         </div>
@@ -749,8 +808,8 @@ export default function Home() {
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>6. 修改文字：</strong>双击已有文字可编辑，修改字号后点击空白处保存。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>7. 删除批注：</strong>鼠标靠近批注出现虚线框，按 Backspace/Delete 删除。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>8. 导出：</strong>点&ldquo;导出&rdquo;下载批注图片，点&ldquo;复制&rdquo;可直接粘贴到微信。</p>
-                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>9. 奖状：</strong>在批改详情页点&ldquo;🏆 奖状&rdquo;，跳转到专业在线奖状生成器制作精美奖状。</p>
-                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>10. 工具箱：</strong>点右上角 🧰 打开教师工具箱，收藏常用教学网站和工具，可自由添加、删除。</p>
+                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>9. 奖状：</strong>在批改详情页点&ldquo;奖状&rdquo;，跳转到专业在线奖状生成器制作精美奖状。</p>
+                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>10. 工具箱：</strong>点右上角工具箱按钮打开教师工具箱，收藏常用教学网站和工具，可自由添加、删除。</p>
                 <p style={{ margin: 0 }}><strong style={{ color: "#374151" }}>11. 快捷键：</strong>1-7 切换工具，Ctrl+Z 撤销，Ctrl+Y 重做，Esc 取消。</p>
               </div>
             </div>}
@@ -880,7 +939,7 @@ export default function Home() {
             <div style={{ display: "flex", gap: 6 }}>
               {activeStudent?.status === "done" && <button onClick={copyAllDetail} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>复制全部</button>}
               {activeStudent?.status === "done" && <button onClick={generateParentNotice} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>家长通知</button>}
-              {activeStudent?.status === "done" && <button onClick={() => setShowAward(true)} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + ORANGE, background: "transparent", color: ORANGE, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>🏆 奖状</button>}
+              {activeStudent?.status === "done" && <button onClick={() => setShowAward(true)} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + ORANGE, background: "transparent", color: ORANGE, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>奖状</button>}
             </div>
           </div>
           {!activeStudent && <div style={{ textAlign: "center", padding: "80px 20px" }}>
@@ -903,9 +962,9 @@ export default function Home() {
             <p style={{ fontSize: 16, fontWeight: 600, color: RED, marginBottom: 8 }}>{activeStudent.name} 批改出错</p>
             <p style={{ fontSize: 13, color: "#D1D5DB" }}>{activeStudent.errorMsg || "请在「上传作业」页面重试"}</p>
           </div>}
-          {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
-            <div style={{ flex: isMobile ? "auto" : "0 0 58%", display: "flex", flexDirection: "column" }}>
-              <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
+          {activeStudent?.status === "done" && <div ref={splitContainerRef} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
+            <div style={{ flex: isMobile ? "auto" : `0 0 ${splitPercent}%`, display: "flex", flexDirection: "column" }}>
+              <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: canvasFit ? "hidden" : "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
                 <div style={{ position: "sticky", top: 0, zIndex: 20, padding: "4px 6px", display: "flex", flexDirection: "column", gap: 3 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", flexWrap: "nowrap", overflowX: "auto" }}>
                     {toolDefs.map(t => (<button key={t.k} onClick={() => { setTool(t.k); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }} title={t.l} style={{ width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer", background: tool === t.k && !pendingStamp ? PRIMARY : "transparent", color: tool === t.k && !pendingStamp ? "#fff" : "#6B7280", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{t.ic}</button>))}
@@ -947,7 +1006,7 @@ export default function Home() {
                 </div>
                 {activeStudent.imageUrls[pageIndex] && <div style={{ position: "relative", background: "#fff", display: "inline-block", minWidth: "100%" }}>
                   {padTop > 0 && <div style={{ height: padTop, background: "#fff" }} />}
-                  <div style={{ display: "flex" }}>{padLeft > 0 && <div style={{ width: padLeft, flexShrink: 0, background: "#fff" }} />}<img ref={imgRef} src={activeStudent.imageUrls[pageIndex]} alt="" style={{ maxWidth: "100%", width: "auto", display: "block" }} onLoad={syncCanvas} onDragStart={e => e.preventDefault()} />{padRight > 0 && <div style={{ width: padRight, flexShrink: 0, background: "#fff" }} />}</div>
+                  <div style={{ display: "flex" }}>{padLeft > 0 && <div style={{ width: padLeft, flexShrink: 0, background: "#fff" }} />}<img ref={imgRef} src={activeStudent.imageUrls[pageIndex]} alt="" style={{ maxWidth: "100%", width: canvasFit ? "100%" : "auto", display: "block" }} onLoad={syncCanvas} onDragStart={e => e.preventDefault()} />{padRight > 0 && <div style={{ width: padRight, flexShrink: 0, background: "#fff" }} />}</div>
                   {padBot > 0 && <div style={{ height: padBot, background: "#fff" }} />}
                   <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, cursor: movingIdx >= 0 ? "grabbing" : pendingStamp ? "copy" : tool === "hand" ? (handDragging ? "grabbing" : "grab") : tool === "text" ? "text" : tool === "eraser" ? "pointer" : tool === "penEraser" ? "crosshair" : "crosshair" }} onMouseDown={mDown} onMouseMove={mMove} onMouseUp={mUp} onDoubleClick={mDblClick} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()} onMouseLeave={() => { if (isDrawing) { setIsDrawing(false); redraw(); } if (handDragging) setHandDragging(false); setHoverIdx(-1); }} />
                   {movingIdx >= 0 && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(45,74,62,0.9)", color: "#fff", padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, zIndex: 30, pointerEvents: "none" }}>移动中 · 单击放置 · Esc取消</div>}
@@ -955,7 +1014,14 @@ export default function Home() {
                 </div>}
               </div>
               {activeStudent.imageUrls.length > 1 && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "4px 0" }}><button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>← 上一页</button><span style={{ fontSize: 11, color: "#6B7280" }}>{"第 " + (pageIndex + 1) + " / " + activeStudent.imageUrls.length + " 页"}</span><button disabled={pageIndex >= activeStudent.imageUrls.length - 1} onClick={() => setPageIndex(i => i + 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>下一页 →</button></div>}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, padding: "4px 0" }}>
+                <button onClick={() => { setCanvasFit(!canvasFit); setTimeout(syncCanvas, 50); }} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: canvasFit ? PRIMARY_LIGHT : "#fff", color: canvasFit ? PRIMARY : "#6B7280", fontSize: 11, fontWeight: 500 }}>{canvasFit ? "原始大小" : "适应屏幕"}</button>
+                {splitPercent !== 58 && <button onClick={() => setSplitPercent(58)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", color: "#6B7280", fontSize: 11, fontWeight: 500 }}>重置比例</button>}
+              </div>
             </div>
+
+            {/* Draggable split divider */}
+            {!isMobile && <div onMouseDown={onSplitMouseDown} style={{ width: 6, flexShrink: 0, cursor: "col-resize", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseEnter={e => { e.currentTarget.style.background = "#D1D5DB44"; }} onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}><div style={{ width: 2, height: 40, borderRadius: 2, background: "#D1D5DB" }} /></div>}
 
             <div style={{ flex: 1, minWidth: 0, overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 100px)", padding: "0 12px" }}>
               {activeStudent.essayDetail ? <>
@@ -1016,10 +1082,11 @@ export default function Home() {
           </> : (() => {
             const [detailName, detailClass] = archiveDetailId.split("___");
             const detailStudents = students.filter(s => s.archived && s.name === detailName && (s.className || "默认班") === detailClass);
-            const allHistory = detailStudents.flatMap(s => (s.history || []).map(h => ({ ...h, studentId: s.id })));
+            const allHistory: { date: string; topic: string; grade: string; essayDetail: any; imageUrls: string[]; studentId: string; histIdx: number }[] = [];
+            detailStudents.forEach(s => (s.history || []).forEach((h, hi) => allHistory.push({ ...h, studentId: s.id, histIdx: hi })));
             return <div>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-                <button onClick={() => setArchiveDetailId(null)} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 12, cursor: "pointer" }}>← 返回</button>
+                <button onClick={() => { setArchiveDetailId(null); setArchiveHistOpen(false); }} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 12, cursor: "pointer" }}>← 返回</button>
                 <div>
                   <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#1F2937" }}>{detailName} 的作文档案</h3>
                   <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9CA3AF" }}>{detailClass} · 共 {allHistory.length} 次批改记录</p>
@@ -1040,17 +1107,28 @@ export default function Home() {
                   </div>}
                 </div>
               ) : null)}
-              {allHistory.length > 0 && <div>
-                <h4 style={{ fontSize: 14, fontWeight: 600, color: "#555", marginBottom: 12 }}>历史记录</h4>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Collapsible history */}
+              {allHistory.length > 0 && <div style={{ borderRadius: 10, border: "1px solid #eee", overflow: "hidden" }}>
+                <div onClick={() => setArchiveHistOpen(!archiveHistOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#FAFAF8", cursor: "pointer", userSelect: "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, transform: archiveHistOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s", display: "inline-block" }}>▶</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "#555" }}>历史记录</span>
+                    <span style={{ fontSize: 11, color: "#9CA3AF" }}>({allHistory.length}条)</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>{archiveHistOpen ? "收起" : "展开"}</span>
+                </div>
+                {archiveHistOpen && <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
                   {allHistory.map((h, i) => (
-                    <div key={i} style={{ background: "#fff", borderRadius: 10, border: "1px solid #eee", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div key={i} style={{ background: "#fff", borderRadius: 8, border: "1px solid #f0f0ee", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>{h.date}</span>
                           <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: PRIMARY_LIGHT, color: PRIMARY }}>{h.grade} · {h.topic}</span>
                         </div>
-                        <span style={{ fontSize: 11, color: "#D1D5DB" }}>#{allHistory.length - i}</span>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          <span style={{ fontSize: 11, color: "#D1D5DB" }}>#{allHistory.length - i}</span>
+                          <button onClick={() => { if (confirm("删除这条历史记录？")) deleteHistoryRecord(h.studentId, h.histIdx); }} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #FECACA", background: "#FEF2F2", fontSize: 10, cursor: "pointer", color: RED }}>删除</button>
+                        </div>
                       </div>
                       {h.essayDetail?.teacher_comment && <p style={{ fontSize: 12, color: "#666", lineHeight: 1.7, margin: 0 }}>{h.essayDetail.teacher_comment}</p>}
                       {h.essayDetail?.highlights?.length > 0 && <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -1059,11 +1137,11 @@ export default function Home() {
                       {h.essayDetail?.improvement_tips?.length > 0 && <div style={{ fontSize: 11, color: "#999", lineHeight: 1.6 }}>改进：{h.essayDetail.improvement_tips.slice(0, 2).join("；")}</div>}
                     </div>
                   ))}
-                </div>
+                </div>}
               </div>}
               {allHistory.length === 0 && <p style={{ textAlign: "center", color: "#D1D5DB", padding: "40px 0", fontSize: 13 }}>暂无历史批改记录</p>}
               <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #eee" }}>
-                <button onClick={() => { if (confirm("确定永久删除 " + detailName + " 的所有归档数据？")) { detailStudents.forEach(s => removeStudent(s.id)); setArchiveDetailId(null); } }} style={{ padding: "8px 20px", borderRadius: 6, border: "1px solid #f0c0c0", background: "#fef2f2", color: RED, fontSize: 12, cursor: "pointer" }}>🗑 删除该学生所有归档数据</button>
+                <button onClick={() => { if (confirm("确定永久删除 " + detailName + " 的所有归档数据？")) { detailStudents.forEach(s => removeStudent(s.id)); setArchiveDetailId(null); } }} style={{ padding: "8px 20px", borderRadius: 6, border: "1px solid #f0c0c0", background: "#fef2f2", color: RED, fontSize: 12, cursor: "pointer" }}>删除该学生所有归档数据</button>
               </div>
             </div>;
           })()}

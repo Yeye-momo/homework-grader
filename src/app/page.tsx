@@ -144,12 +144,12 @@ export default function Home() {
     });
     setActionMap(prev => ({ ...prev, [pk]: shifted }));
   }
-  function setPad(idx: number, fn: (v: number) => number) {
+  function setPadFn(idx: number, fn: (v: number) => number) {
     const cur = padMap[pk] || [0,0,0,0]; const oldVal = cur[idx]; const newVal = fn(oldVal); const diff = newVal - oldVal; if (diff === 0) return;
     const dx = idx === 2 ? diff : 0; const dy = idx === 0 ? diff : 0; shiftAnnotations(dx, dy);
     setPadMap(prev => { const next = [...(prev[pk] || [0,0,0,0])] as [number,number,number,number]; next[idx] = newVal; return { ...prev, [pk]: next }; });
   }
-  function setPadVal(idx: number, newVal: number) { setPad(idx, () => newVal); }
+  function setPadVal(idx: number, newVal: number) { setPadFn(idx, () => newVal); }
   function resetPad() { const cur = padMap[pk] || [0,0,0,0]; shiftAnnotations(-cur[2], -cur[0]); setPadMap(prev => ({ ...prev, [pk]: [0,0,0,0] })); }
 
   const [initDone, setInitDone] = useState(false);
@@ -193,6 +193,7 @@ export default function Home() {
       if (d.actionMap) setActionMap(d.actionMap);
       if (d.padMap) setPadMap(d.padMap);
     } catch { setInitDone(true); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     if (!initDone) return;
@@ -383,7 +384,7 @@ export default function Home() {
 
   function exportData() { const data = { students: students.map(s => ({ ...s, images: [] })), actionMap, padMap, grade, topic, classNames, currentClass, specialReq, modelText, modelImageUrls, version: "v6" }; const blob = new Blob([JSON.stringify(data)], { type: "application/json" }); const link = document.createElement("a"); link.download = "批改数据_" + new Date().toLocaleDateString("zh-CN") + ".json"; link.href = URL.createObjectURL(blob); link.click(); }
   const importFileRef = useRef<HTMLInputElement>(null);
-  function importData(e: React.ChangeEvent<HTMLInputElement>) { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = async () => { try { const data = JSON.parse(reader.result as string); if (data.students) { const restored = data.students.map((s: any) => ({ ...s, images: [], className: s.className || "默认班", imageUrls: s.imageUrls || [] })); setStudents(restored); setActiveStudentId(data.students[0]?.id || ""); /* Save images to IndexedDB so they persist after refresh */ for (const s of restored) { for (let i = 0; i < s.imageUrls.length; i++) { if (s.imageUrls[i]) await saveOneImage(s.id, i, s.imageUrls[i]); } } } if (data.actionMap) setActionMap(data.actionMap); if (data.padMap) setPadMap(data.padMap); if (data.grade) setGrade(data.grade); if (data.topic) setTopic(data.topic); if (data.classNames) setClassNames(data.classNames); if (data.currentClass) setCurrentClass(data.currentClass); if (data.specialReq) setSpecialReq(data.specialReq); if (data.modelText) setModelText(data.modelText); if (data.modelImageUrls?.length) { setModelImageUrls(data.modelImageUrls); for (let i = 0; i < data.modelImageUrls.length; i++) await saveModelImage(i, data.modelImageUrls[i]); } setCopyMsg("数据导入成功！"); setTimeout(() => setCopyMsg(""), 2000); } catch { alert("数据文件格式错误"); } }; reader.readAsText(file); e.target.value = ""; }
+  function importData(e: React.ChangeEvent<HTMLInputElement>) { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = async () => { try { const data = JSON.parse(reader.result as string); if (data.students) { const restored = data.students.map((s: any) => ({ ...s, images: [], className: s.className || "默认班", imageUrls: s.imageUrls || [] })); setStudents(restored); setActiveStudentId(data.students[0]?.id || ""); for (const s of restored) { for (let i = 0; i < s.imageUrls.length; i++) { if (s.imageUrls[i]) await saveOneImage(s.id, i, s.imageUrls[i]); } } } if (data.actionMap) setActionMap(data.actionMap); if (data.padMap) setPadMap(data.padMap); if (data.grade) setGrade(data.grade); if (data.topic) setTopic(data.topic); if (data.classNames) setClassNames(data.classNames); if (data.currentClass) setCurrentClass(data.currentClass); if (data.specialReq) setSpecialReq(data.specialReq); if (data.modelText) setModelText(data.modelText); if (data.modelImageUrls?.length) { setModelImageUrls(data.modelImageUrls); for (let i = 0; i < data.modelImageUrls.length; i++) await saveModelImage(i, data.modelImageUrls[i]); } setCopyMsg("数据导入成功！"); setTimeout(() => setCopyMsg(""), 2000); } catch { alert("数据文件格式错误"); } }; reader.readAsText(file); e.target.value = ""; }
 
   useEffect(() => { function onKey(e: KeyboardEvent) {
     const tag = (e.target as HTMLElement)?.tagName;
@@ -577,21 +578,17 @@ export default function Home() {
     const ctx = cv.getContext("2d"); if (!ctx) return;
     const W = 900, H = 620; cv.width = W; cv.height = H;
     const t = AWARD_TEMPLATES[awardTemplate] || AWARD_TEMPLATES[0];
-    // Background gradient
     const grd = ctx.createLinearGradient(0, 0, W, H);
     grd.addColorStop(0, t.bg[0]); grd.addColorStop(1, t.bg[1]);
     ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
-    // Inner cream panel
     const m = 30;
-    ctx.fillStyle = "rgba(255,255,248,0.92)"; 
+    ctx.fillStyle = "rgba(255,255,248,0.92)";
     ctx.beginPath();
     const r = 12; ctx.moveTo(m + r, m); ctx.lineTo(W - m - r, m); ctx.arcTo(W - m, m, W - m, m + r, r); ctx.lineTo(W - m, H - m - r); ctx.arcTo(W - m, H - m, W - m - r, H - m, r); ctx.lineTo(m + r, H - m); ctx.arcTo(m, H - m, m, H - m - r, r); ctx.lineTo(m, m + r); ctx.arcTo(m, m, m + r, m, r); ctx.fill();
-    // Decorative border
     ctx.strokeStyle = t.border; ctx.lineWidth = 3; ctx.strokeRect(m + 10, m + 10, W - m * 2 - 20, H - m * 2 - 20);
     ctx.strokeStyle = t.border + "66"; ctx.lineWidth = 1; ctx.strokeRect(m + 16, m + 16, W - m * 2 - 32, H - m * 2 - 32);
-    // Corner ornaments
     const cSize = 20;
-    [[m + 14, m + 14], [W - m - 14, m + 14], [m + 14, H - m - 14], [W - m - 14, H - m - 14]].forEach(([cx, cy]) => {
+    ([[m + 14, m + 14], [W - m - 14, m + 14], [m + 14, H - m - 14], [W - m - 14, H - m - 14]] as [number, number][]).forEach(([cx, cy]) => {
       ctx.save(); ctx.translate(cx, cy);
       ctx.strokeStyle = t.border; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(-cSize, 0); ctx.lineTo(0, 0); ctx.lineTo(0, -cSize); ctx.stroke();
@@ -599,38 +596,29 @@ export default function Home() {
       ctx.fillStyle = t.accent; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     });
-    // Top decorative line
     ctx.strokeStyle = t.border; ctx.lineWidth = 1;
     const topY = m + 50;
     ctx.beginPath(); ctx.moveTo(m + 60, topY); ctx.lineTo(W / 2 - 80, topY); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(W / 2 + 80, topY); ctx.lineTo(W - m - 60, topY); ctx.stroke();
-    // Stars
     ctx.fillStyle = t.accent; ctx.font = "28px serif"; ctx.textAlign = "center";
     ctx.fillText("✦", W / 2 - 50, topY + 8); ctx.fillText("✦", W / 2, topY + 8); ctx.fillText("✦", W / 2 + 50, topY + 8);
-    // Title
     ctx.fillStyle = t.titleColor; ctx.font = "bold 52px 'Noto Sans SC','Microsoft YaHei',serif";
     ctx.textAlign = "center"; ctx.fillText(awardTitle, W / 2, topY + 75);
-    // Divider under title
     ctx.strokeStyle = t.border; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(W / 2 - 120, topY + 90); ctx.lineTo(W / 2 + 120, topY + 90); ctx.stroke();
-    // Name line
     ctx.fillStyle = t.textColor; ctx.font = "bold 26px 'Noto Sans SC','Microsoft YaHei',sans-serif";
     ctx.textAlign = "left";
     ctx.fillText(awardName + " 同学：", m + 80, topY + 145);
-    // Reason text - wrap
     ctx.font = "22px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = t.textColor;
     const maxTW = W - m * 2 - 160; let rLine = ""; const rLines: string[] = [];
     for (const ch of awardReason) { if (ctx.measureText(rLine + ch).width > maxTW) { rLines.push(rLine); rLine = ch; } else rLine += ch; }
     if (rLine) rLines.push(rLine);
     for (let i = 0; i < rLines.length; i++) ctx.fillText(rLines[i], m + 80, topY + 190 + i * 38);
-    // Bottom text
     ctx.fillStyle = t.textColor; ctx.font = "italic 20px 'Noto Sans SC','Microsoft YaHei',sans-serif";
     ctx.textAlign = "left"; ctx.fillText("特发此状，以资鼓励。", m + 80, H - m - 110);
-    // Teacher & date
     ctx.textAlign = "right"; ctx.font = "20px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = t.textColor;
     if (awardTeacher) ctx.fillText(awardTeacher, W - m - 70, H - m - 75);
     ctx.fillText(new Date().toLocaleDateString("zh-CN"), W - m - 70, H - m - 45);
-    // Seal
     ctx.save(); ctx.translate(W - m - 130, H - m - 100);
     ctx.strokeStyle = t.accent + "99"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, 0, 32, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = t.accent + "99"; ctx.font = "bold 13px 'Noto Sans SC',sans-serif"; ctx.textAlign = "center"; ctx.fillText("优秀", 0, -4); ctx.fillText("作文", 0, 14);
@@ -645,7 +633,7 @@ export default function Home() {
   function selectAllForBatch() { const ids = classStudents.map(s => s.id); setSelectedForBatch(new Set(ids)); }
   function deselectAllForBatch() { setSelectedForBatch(new Set()); }
 
-  function tabStyle(t: TabName) { return { padding: "10px 24px", border: "none", borderRadius: "8px 8px 0 0", cursor: "pointer" as const, fontWeight: 600 as const, fontSize: "15px", background: tab === t ? "#fff" : "transparent", color: tab === t ? PRIMARY : "#999", borderBottom: tab === t ? "2px solid " + PRIMARY : "2px solid transparent" }; }
+  function tabStyle(t: TabName): React.CSSProperties { return { padding: "10px 24px", border: "none", borderRadius: "8px 8px 0 0", cursor: "pointer", fontWeight: 600, fontSize: "15px", background: tab === t ? "#fff" : "transparent", color: tab === t ? PRIMARY : "#999", borderBottom: tab === t ? "2px solid " + PRIMARY : "2px solid transparent" }; }
   const toolDefs: { k: Tool; l: string; ic: string; key: string }[] = [{ k: "pen", l: "画笔 (1)", ic: "✏️", key: "1" }, { k: "hand", l: "拖拽 (2)", ic: "🖐", key: "2" }, { k: "text", l: "文字 (3)", ic: "T", key: "3" }, { k: "circle", l: "圆圈 (4)", ic: "⭕", key: "4" }, { k: "wavy", l: "波浪线 (5)", ic: "〰", key: "5" }, { k: "eraser", l: "整体删除 (6)", ic: "🧹", key: "6" }, { k: "penEraser", l: "局部擦除 (7)", ic: "🩹", key: "7" }];
   const cpBtnS: React.CSSProperties = { background: "transparent", border: "none", cursor: "pointer", color: "#aaa", fontSize: 13, padding: "2px 6px", borderRadius: 4 };
 
@@ -672,20 +660,17 @@ export default function Home() {
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>🏆 生成奖状</h3>
             <button onClick={() => setShowAward(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8E4", background: "#fff", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>✕</button>
           </div>
-          {/* Template selector */}
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             {AWARD_TEMPLATES.map((t, i) => (
               <button key={i} onClick={() => { setAwardTemplate(i); setTimeout(drawAward, 50); }} style={{ padding: "6px 14px", borderRadius: 6, border: awardTemplate === i ? "2px solid " + t.border : "1px solid #E0E0DC", background: awardTemplate === i ? `linear-gradient(135deg, ${t.bg[0]}22, ${t.bg[1]}22)` : "#fff", color: awardTemplate === i ? t.border : "#6B7280", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t.name}</button>
             ))}
           </div>
-          {/* Editable fields */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
             <div><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>奖项名称</label><input value={awardTitle} onChange={e => setAwardTitle(e.target.value)} style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
             <div><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>学生姓名</label><input value={awardName} onChange={e => setAwardName(e.target.value)} style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
             <div style={{ gridColumn: "1 / -1" }}><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>获奖理由</label><textarea value={awardReason} onChange={e => setAwardReason(e.target.value)} rows={2} style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} /></div>
             <div><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>颁发人</label><input value={awardTeacher} onChange={e => setAwardTeacher(e.target.value)} placeholder="如：XX老师" style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
           </div>
-          {/* Preview */}
           <canvas ref={awardCanvasRef} style={{ width: "100%", borderRadius: 8, border: "1px solid #eee" }} />
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button onClick={drawAward} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: ORANGE, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>刷新预览</button>
@@ -724,21 +709,20 @@ export default function Home() {
               <p style={{ fontSize: 10, color: "#D1D5DB", marginTop: 8, textAlign: "center", lineHeight: 1.5 }}>API Key 仅保存在浏览器本地，不会上传至服务器</p>
             </div>}
 
-            {/* Tutorial - collapsible */}
             <div onClick={() => setShowTutorial(!showTutorial)} style={{ marginTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: 10, border: "1px solid #E8E8E4", cursor: "pointer", background: showTutorial ? "#FAFAF8" : "#fff", transition: "all 0.2s" }}>
               <div><p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#374151" }}>使用教程</p><p style={{ margin: "2px 0 0", fontSize: 11, color: "#9CA3AF" }}>操作说明与快捷键</p></div>
               <span style={{ fontSize: 12, color: "#9CA3AF", transform: showTutorial ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▼</span>
             </div>
             {showTutorial && <div style={{ marginTop: 8, padding: "16px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#FAFAF8" }}>
               <div style={{ fontSize: 12, lineHeight: 2, color: "#6B7280" }}>
-                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>1. 添加学生：</strong>在"上传作业"页输入姓名，点添加。可建多个班级管理。</p>
+                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>1. 添加学生：</strong>在&ldquo;上传作业&rdquo;页输入姓名，点添加。可建多个班级管理。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>2. 上传照片：</strong>选中学生后，点击或拖拽照片到上传区。支持多页作文。</p>
-                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>3. 开始批改：</strong>点"批改"按钮，AI 自动识别文字并生成批改结果。</p>
+                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>3. 开始批改：</strong>点&ldquo;批改&rdquo;按钮，AI 自动识别文字并生成批改结果。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>4. 图上标注：</strong>在批改详情页用画笔、文字、圆圈等工具在作文图上批注。</p>
-                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>5. 快捷批语：</strong>点击"好词""错字"等标签后，在图上点击放置。</p>
+                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>5. 快捷批语：</strong>点击&ldquo;好词&rdquo;&ldquo;错字&rdquo;等标签后，在图上点击放置。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>6. 修改文字：</strong>双击已有文字可编辑，修改字号后点击空白处保存。</p>
                 <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>7. 删除批注：</strong>鼠标靠近批注出现虚线框，按 Backspace/Delete 删除。</p>
-                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>8. 导出：</strong>点"导出"下载批注图片，点"复制"可直接粘贴到微信。</p>
+                <p style={{ margin: "0 0 6px" }}><strong style={{ color: "#374151" }}>8. 导出：</strong>点&ldquo;导出&rdquo;下载批注图片，点&ldquo;复制&rdquo;可直接粘贴到微信。</p>
                 <p style={{ margin: 0 }}><strong style={{ color: "#374151" }}>9. 快捷键：</strong>1-7 切换工具，Ctrl+Z 撤销，Ctrl+Y 重做，Esc 取消。</p>
               </div>
             </div>}
@@ -765,7 +749,6 @@ export default function Home() {
 
         {tab === "upload" && (
           <div>
-            {/* Config summary bar */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", marginBottom: 16, background: "#fff", borderRadius: 10, border: "1px solid #E8E8E4" }}>
               <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 13, color: "#6B7280" }}>
                 <span>当前：<strong style={{ color: "#374151" }}>{grade}</strong></span>
@@ -777,7 +760,6 @@ export default function Home() {
               <button onClick={() => setShowConfig(!showConfig)} style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid #E0E0DC", background: showConfig ? PRIMARY_LIGHT : "#fff", color: showConfig ? PRIMARY : "#6B7280", fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>{showConfig ? "收起配置" : "修改配置"}</button>
             </div>
 
-            {/* Collapsible config panel */}
             <div style={{ maxHeight: showConfig ? 280 : 0, overflow: "hidden", transition: "max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease", opacity: showConfig ? 1 : 0, marginBottom: showConfig ? 16 : 0 }}>
               <div style={{ padding: 20, borderRadius: 12, border: "1px solid #E8E8E4", background: "#fff" }}>
                 <div style={{ display: "flex", gap: 16, marginBottom: 12, flexWrap: "wrap" }}>
@@ -797,11 +779,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Main content area — now full width */}
             <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 16 : 24 }}>
-              {/* LEFT: class + student list */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                {/* Class tabs */}
                 <div style={{ display: "flex", gap: 4, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
                   {classNames.map(cn => (
                     <div key={cn} style={{ display: "inline-flex", alignItems: "center" }}>
@@ -850,7 +829,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* RIGHT: photo upload + grading buttons */}
               {activeStudent && activeStudent.className === currentClass && (
                 <div style={{ width: isMobile ? "100%" : 360, flexShrink: 0 }}>
                   <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: "#374151" }}>{activeStudent.name} 的作业照片</h4>
@@ -868,7 +846,6 @@ export default function Home() {
         )}
 
         {tab === "detail" && <div>
-          {/* Minimal top bar for detail mode */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
             <button onClick={() => setTab("upload")} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>← 返回</button>
             <div style={{ display: "flex", gap: 6 }}>
@@ -879,15 +856,15 @@ export default function Home() {
           </div>
           {!activeStudent && <div style={{ textAlign: "center", padding: "80px 20px" }}>
             <p style={{ fontSize: 16, fontWeight: 600, color: "#9CA3AF", marginBottom: 8 }}>请先选择一个学生</p>
-            <p style={{ fontSize: 13, color: "#D1D5DB" }}>在"上传作业"页面添加学生后，可以在这里查看批改结果</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB" }}>在&ldquo;上传作业&rdquo;页面添加学生后，可以在这里查看批改结果</p>
           </div>}
           {activeStudent && activeStudent.status === "idle" && (activeStudent.images.length === 0 && activeStudent.imageUrls.length === 0) && <div style={{ textAlign: "center", padding: "80px 20px" }}>
             <p style={{ fontSize: 16, fontWeight: 600, color: "#9CA3AF", marginBottom: 8 }}>{activeStudent.name} 还没有上传作业照片</p>
-            <p style={{ fontSize: 13, color: "#D1D5DB" }}>请先在"上传作业"页面上传照片</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB" }}>请先在&ldquo;上传作业&rdquo;页面上传照片</p>
           </div>}
           {activeStudent && activeStudent.status === "idle" && (activeStudent.images.length > 0 || activeStudent.imageUrls.length > 0) && <div style={{ textAlign: "center", padding: "80px 20px" }}>
             <p style={{ fontSize: 16, fontWeight: 600, color: "#9CA3AF", marginBottom: 8 }}>{activeStudent.name} 还没有批改</p>
-            <p style={{ fontSize: 13, color: "#D1D5DB" }}>已上传 {activeStudent.images.length || activeStudent.imageUrls.length} 张照片，请在"上传作业"页面点击批改</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB" }}>已上传 {activeStudent.images.length || activeStudent.imageUrls.length} 张照片，请在&ldquo;上传作业&rdquo;页面点击批改</p>
           </div>}
           {activeStudent && activeStudent.status === "grading" && <div style={{ textAlign: "center", padding: "80px 20px" }}>
             <p style={{ fontSize: 16, fontWeight: 600, color: ORANGE, marginBottom: 8 }}>{activeStudent.name} 正在批改中…</p>
@@ -898,11 +875,8 @@ export default function Home() {
             <p style={{ fontSize: 13, color: "#D1D5DB" }}>{activeStudent.errorMsg || "请在「上传作业」页面重试"}</p>
           </div>}
           {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
-            {/* LEFT: Canvas */}
             <div style={{ flex: isMobile ? "auto" : "0 0 58%", display: "flex", flexDirection: "column" }}>
-              {/* Canvas container with floating toolbars */}
               <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
-                {/* Floating toolbar - top */}
                 <div style={{ position: "sticky", top: 0, zIndex: 20, padding: "4px 6px", display: "flex", flexDirection: "column", gap: 3 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", flexWrap: "nowrap", overflowX: "auto" }}>
                     {toolDefs.map(t => (<button key={t.k} onClick={() => { setTool(t.k); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }} title={t.l} style={{ width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer", background: tool === t.k && !pendingStamp ? PRIMARY : "transparent", color: tool === t.k && !pendingStamp ? "#fff" : "#6B7280", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{t.ic}</button>))}
@@ -914,10 +888,10 @@ export default function Home() {
                     <input type="color" value={strokeColor} onChange={e => setStrokeColor(e.target.value)} title="自定义颜色" style={{ width: 22, height: 22, border: "none", padding: 0, cursor: "pointer", borderRadius: 4, flexShrink: 0 }} />
                     <div style={{ width: 1, height: 24, background: "#E0E0DC", margin: "0 3px", flexShrink: 0 }} />
                     <input type="number" min={8} max={72} value={fontSize} onChange={e => { const v = Number(e.target.value); if (v >= 8 && v <= 72) { setFontSize(v); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], fontSize: v }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } } }} style={{ width: 44, padding: "4px 2px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, textAlign: "center", outline: "none", flexShrink: 0 }} title="字号" />
-                    {([["left", <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="14" height="2" rx="1" fill="currentColor"/></>],
-                      ["center", <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="3" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="14" height="2" rx="1" fill="currentColor"/></>],
-                      ["right", <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="6" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect x="2" y="11" width="14" height="2" rx="1" fill="currentColor"/></>],
-                      ["justify", <><rect x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="6" width="16" height="2" rx="1" fill="currentColor"/><rect x="0" y="11" width="16" height="2" rx="1" fill="currentColor"/></>]
+                    {([["left", <><rect key="1" x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect key="2" x="0" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect key="3" x="0" y="11" width="14" height="2" rx="1" fill="currentColor"/></>],
+                      ["center", <><rect key="1" x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect key="2" x="3" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect key="3" x="1" y="11" width="14" height="2" rx="1" fill="currentColor"/></>],
+                      ["right", <><rect key="1" x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect key="2" x="6" y="6" width="10" height="2" rx="1" fill="currentColor"/><rect key="3" x="2" y="11" width="14" height="2" rx="1" fill="currentColor"/></>],
+                      ["justify", <><rect key="1" x="0" y="1" width="16" height="2" rx="1" fill="currentColor"/><rect key="2" x="0" y="6" width="16" height="2" rx="1" fill="currentColor"/><rect key="3" x="0" y="11" width="16" height="2" rx="1" fill="currentColor"/></>]
                     ] as [typeof textAlign, React.ReactNode][]).map(([al, icon]) => (
                       <button key={al} onClick={() => { setTextAlign(al); if (editIdx >= 0) { const acts = [...(actionMap[pk] || [])]; if (acts[editIdx]?.type === "text") { acts[editIdx] = { ...acts[editIdx], textAlign: al }; setActionMap(pr => ({ ...pr, [pk]: acts })); } } }} style={{ width: 32, height: 32, borderRadius: 6, border: "none", cursor: "pointer", background: textAlign === al ? PRIMARY_LIGHT : "transparent", color: textAlign === al ? PRIMARY : "#9CA3AF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.1s" }}>
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">{icon}</svg>
@@ -942,7 +916,6 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-                {/* Canvas content */}
                 {activeStudent.imageUrls[pageIndex] && <div style={{ position: "relative", background: "#fff", display: "inline-block", minWidth: "100%" }}>
                   {padTop > 0 && <div style={{ height: padTop, background: "#fff" }} />}
                   <div style={{ display: "flex" }}>{padLeft > 0 && <div style={{ width: padLeft, flexShrink: 0, background: "#fff" }} />}<img ref={imgRef} src={activeStudent.imageUrls[pageIndex]} alt="" style={{ maxWidth: "100%", width: "auto", display: "block" }} onLoad={syncCanvas} onDragStart={e => e.preventDefault()} />{padRight > 0 && <div style={{ width: padRight, flexShrink: 0, background: "#fff" }} />}</div>
@@ -955,7 +928,6 @@ export default function Home() {
               {activeStudent.imageUrls.length > 1 && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "4px 0" }}><button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>← 上一页</button><span style={{ fontSize: 11, color: "#6B7280" }}>{"第 " + (pageIndex + 1) + " / " + activeStudent.imageUrls.length + " 页"}</span><button disabled={pageIndex >= activeStudent.imageUrls.length - 1} onClick={() => setPageIndex(i => i + 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>下一页 →</button></div>}
             </div>
 
-            {/* MIDDLE: Detail panel */}
             <div style={{ flex: 1, minWidth: 0, overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 100px)", padding: "0 12px" }}>
               {activeStudent.essayDetail ? <>
                 <div style={{ marginBottom: 16 }}><h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: RED }}>逐段批注</h3>{(activeStudent.essayDetail.corrections || []).map((c: any, i: number) => (<div key={i} style={{ background: "#fff", borderRadius: 8, padding: 12, marginBottom: 8, border: "1px solid #eee" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}><div style={{ flex: 1 }}><span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: c.type === "praise" ? GREEN : RED, color: "#fff" }}>{c.paragraph}{c.type === "praise" ? " +" : ""}</span><p style={{ fontSize: 13, margin: "4px 0 0", color: "#444" }}>{c.text}</p></div><button onClick={() => copyOneCorrection(c)} style={cpBtnS} title="复制批注">复制</button></div>{c.suggested && c.type !== "praise" && <div style={{ marginTop: 4, padding: "4px 10px", borderRadius: 5, background: "#edf9f1", borderLeft: "3px solid " + GREEN, fontSize: 13, color: GREEN, display: "flex", justifyContent: "space-between", alignItems: "center" }}>→ {c.suggested}<button onClick={() => copyOneSuggested(c)} style={{ ...cpBtnS, color: GREEN }} title="复制建议">复制</button></div>}</div>))}</div>
@@ -967,7 +939,6 @@ export default function Home() {
                 {activeStudent.essayDetail.improvement_tips?.length > 0 && <div style={{ background: "#f0f4ff", borderRadius: 8, padding: 16, border: "1px solid #d0d8f0", position: "relative" }}><button onClick={copyAllTips} style={{ ...cpBtnS, position: "absolute", top: 12, right: 12 }}>复制</button><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: PRIMARY }}>改进方向</h3>{activeStudent.essayDetail.improvement_tips.map((tip: string, i: number) => (<p key={i} style={{ fontSize: 13, lineHeight: 1.8, margin: "0 0 6px", color: "#444" }}>{tip}</p>))}</div>}
               </> : <p style={{ color: "#bbb", textAlign: "center", paddingTop: 40 }}>请先批改后查看</p>}
             </div>
-            {/* RIGHT: Student list sidebar */}
             {!isMobile && <div style={{ width: 72, flexShrink: 0, display: "flex", flexDirection: "column", gap: 4, paddingTop: 4, overflow: "auto", maxHeight: "calc(100vh - 100px)" }}>
               {students.filter(s => s.status === "done").map(s => (
                 <button key={s.id} onClick={() => { setActiveStudentId(s.id); setPageIndex(0); }} title={s.name} style={{ width: 64, padding: "8px 4px", borderRadius: 8, border: activeStudentId === s.id ? "2px solid " + PRIMARY : "1px solid #E0E0DC", cursor: "pointer", background: activeStudentId === s.id ? PRIMARY_LIGHT : "#fff", color: activeStudentId === s.id ? PRIMARY : "#6B7280", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name.length > 3 ? s.name.slice(0, 3) : s.name}</button>
@@ -978,7 +949,6 @@ export default function Home() {
 
         {tab === "archive" && <div>
           {!archiveDetailId ? <>
-          {/* LIST VIEW */}
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#555" }}>储存箱 <span style={{ fontSize: 13, fontWeight: 400, color: "#999" }}>（学生作文档案）</span></h3>
           <div style={{ marginBottom: 16, position: "relative", maxWidth: 300 }}>
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索学生…" style={{ width: "100%", padding: "7px 12px 7px 30px", borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
@@ -1000,7 +970,7 @@ export default function Home() {
                     {Object.entries(nameGroups).map(([name, stuList]) => {
                       const totalRecords = stuList.reduce((sum, s) => sum + (s.history?.length || 0), 0) || stuList.length;
                       const latestComment = stuList[stuList.length - 1]?.essayDetail?.teacher_comment;
-                      return (<div key={name} onClick={() => setArchiveDetailId(name + "___" + cn)} style={{ background: "#fff", borderRadius: 10, border: "1px solid #eee", padding: "14px 16px", cursor: "pointer", transition: "all 0.15s", display: "flex", flexDirection: "column", gap: 6 }} onMouseEnter={e => { e.currentTarget.style.borderColor = PRIMARY_MID; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "#eee"; e.currentTarget.style.boxShadow = "none"; }}>
+                      return (<div key={name} onClick={() => setArchiveDetailId(name + "___" + cn)} style={{ background: "#fff", borderRadius: 10, border: "1px solid #eee", padding: "14px 16px", cursor: "pointer", transition: "all 0.15s", display: "flex", flexDirection: "column", gap: 6 }} onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = PRIMARY_MID; (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)"; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "#eee"; (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <span style={{ fontWeight: 700, fontSize: 15 }}>{name}</span>
                           <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: GREEN, color: "#fff" }}>{totalRecords} 次</span>
@@ -1015,7 +985,6 @@ export default function Home() {
             </div>
           )}
           </> : (() => {
-            /* DETAIL VIEW */
             const [detailName, detailClass] = archiveDetailId.split("___");
             const detailStudents = students.filter(s => s.archived && s.name === detailName && (s.className || "默认班") === detailClass);
             const allHistory = detailStudents.flatMap(s => (s.history || []).map(h => ({ ...h, studentId: s.id })));

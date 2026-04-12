@@ -87,6 +87,9 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [copyMsg, setCopyMsg] = useState("");
   const [batchStatus, setBatchStatus] = useState("");
+  const [splitPct, setSplitPct] = useState(58);
+  const splitDragging = useRef(false);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
   const [parentNotice, setParentNotice] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [globalDragOver, setGlobalDragOver] = useState(false);
@@ -230,6 +233,20 @@ export default function Home() {
     } catch {}
   }, [students, activeStudentId, grade, topic, actionMap, padMap, specialReq, modelText, modelImageUrls, classNames, currentClass, tab, initDone]);
   useEffect(() => { if (initDone) { try { localStorage.setItem("hw_toolbox", JSON.stringify(toolboxItems)); } catch {} } }, [toolboxItems, initDone]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!splitDragging.current || !splitContainerRef.current) return;
+      e.preventDefault();
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      setSplitPct(Math.min(80, Math.max(30, pct)));
+    };
+    const onUp = () => { splitDragging.current = false; document.body.style.cursor = ""; document.body.style.userSelect = ""; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
 
   function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
     const out: string[] = [];
@@ -953,8 +970,8 @@ export default function Home() {
             <p style={{ fontSize: 16, fontWeight: 600, color: RED, marginBottom: 8 }}>{activeStudent.name} 批改出错</p>
             <p style={{ fontSize: 13, color: "#D1D5DB" }}>{activeStudent.errorMsg || "请在「上传作业」页面重试"}</p>
           </div>}
-          {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
-            <div style={{ flex: isMobile ? "auto" : "0 0 58%", display: "flex", flexDirection: "column", resize: isMobile ? "none" : "horizontal", overflow: "auto", minWidth: isMobile ? "auto" : "30%", maxWidth: isMobile ? "none" : "80%" }}>
+          {activeStudent?.status === "done" && <div ref={splitContainerRef} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0, position: "relative" }}>
+            <div style={{ flex: isMobile ? "auto" : `0 0 ${splitPct}%`, display: "flex", flexDirection: "column", overflow: "auto", minWidth: isMobile ? "auto" : "30%", maxWidth: isMobile ? "none" : "80%" }}>
               <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
                 <div style={{ position: "sticky", top: 0, zIndex: 20, padding: "4px 6px", display: "flex", flexDirection: "column", gap: 3 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", flexWrap: "nowrap", overflowX: "auto" }}>
@@ -1006,6 +1023,13 @@ export default function Home() {
               </div>
               {activeStudent.imageUrls.length > 1 && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "4px 0" }}><button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>← 上一页</button><span style={{ fontSize: 11, color: "#6B7280" }}>{"第 " + (pageIndex + 1) + " / " + activeStudent.imageUrls.length + " 页"}</span><button disabled={pageIndex >= activeStudent.imageUrls.length - 1} onClick={() => setPageIndex(i => i + 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>下一页 →</button></div>}
             </div>
+
+            {!isMobile && <div
+              onMouseDown={(e) => { e.preventDefault(); splitDragging.current = true; document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none"; }}
+              style={{ width: 6, cursor: "col-resize", background: "#E0E0DC", flexShrink: 0, borderRadius: 3, transition: "background 0.15s", position: "relative", zIndex: 10 }}
+              onMouseEnter={e => (e.currentTarget.style.background = PRIMARY_MID)}
+              onMouseLeave={e => { if (!splitDragging.current) e.currentTarget.style.background = "#E0E0DC"; }}
+            />}
 
             <div style={{ flex: 1, minWidth: 0, overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 100px)", padding: "0 12px" }}>
               {activeStudent.essayDetail ? <>

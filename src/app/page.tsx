@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 type TabName = "upload" | "detail" | "archive";
 type Tool = "pen" | "text" | "circle" | "wavy" | "eraser" | "hand" | "penEraser";
-interface Student { id: string; name: string; className: string; images: File[]; imageUrls: string[]; ocrText: string; essayDetail: any | null; report: string; status: "idle" | "grading" | "done" | "error"; errorMsg?: string; archived?: boolean; }
+interface Student { id: string; name: string; className: string; images: File[]; imageUrls: string[]; ocrText: string; essayDetail: any | null; report: string; status: "idle" | "grading" | "done" | "error"; errorMsg?: string; archived?: boolean; history?: { date: string; topic: string; grade: string; essayDetail: any; imageUrls: string[] }[]; }
 interface DrawAction { type: "pen" | "text" | "circle" | "wavy"; color: string; lineWidth: number; points?: { x: number; y: number }[]; x?: number; y?: number; w?: number; h?: number; endX?: number; text?: string; fontSize?: number; textAlign?: "left" | "center" | "right" | "justify"; }
 
 const PRIMARY = "#2D4A3E", PRIMARY_LIGHT = "#E8EEEB", PRIMARY_MID = "#C2D1CA", RED = "#9B4D46", GREEN = "#5A8A6A", ORANGE = "#B8865C", BG = "#FAFAF8";
@@ -81,7 +81,6 @@ export default function Home() {
   const [penWidth] = useState(2);
   const [fontSize, setFontSize] = useState(14);
   const [textAlign, setTextAlign] = useState<"left" | "center" | "right" | "justify">("justify");
-  const [toolbarExpanded, setToolbarExpanded] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState({ x: 0, y: 0 });
   const [curPoints, setCurPoints] = useState<{ x: number; y: number }[]>([]);
@@ -111,9 +110,8 @@ export default function Home() {
   const [customApiKey, setCustomApiKey] = useState("");
   const [customEpPro, setCustomEpPro] = useState("");
   const [customEpFast, setCustomEpFast] = useState("");
-  const [layoutWidth, setLayoutWidth] = useState(() => { try { const v = Number(localStorage.getItem("hw_layout_w")); return v >= 800 && v <= 10000 ? v : 0; } catch { return 0; } });
-  const [splitPct, setSplitPct] = useState(() => { try { const v = Number(localStorage.getItem("hw_split_pct")); return v >= 25 && v <= 75 ? v : 55; } catch { return 55; } });
-  const splitDrag = useRef(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showAward, setShowAward] = useState(false);
 
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -126,7 +124,7 @@ export default function Home() {
   const pk = activeStudentId + "_" + pageIndex;
   const pad = padMap[pk] || [0, 0, 0, 0];
   const [padTop, padBot, padLeft, padRight] = pad;
-  const classStudents = students.filter(s => !s.archived && s.className === currentClass);
+  const classStudents = students.filter(s => !s.archived && s.className === currentClass && (!searchQuery || s.name.includes(searchQuery)));
 
   function shiftAnnotations(dx: number, dy: number) {
     const acts = actionMap[pk] || [];
@@ -391,15 +389,6 @@ export default function Home() {
     if (toolKeys[e.key] && !e.ctrlKey && !e.metaKey) { setTool(toolKeys[e.key]); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }
   } window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); });
 
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => { if (!splitDrag.current) return; e.preventDefault(); const c = document.getElementById("detail-split"); if (!c) return; const r = c.getBoundingClientRect(); const p = ((e.clientX - r.left) / r.width) * 100; setSplitPct(Math.max(25, Math.min(75, Math.round(p)))); };
-    const onUp = () => { if (splitDrag.current) { splitDrag.current = false; document.body.style.cursor = ""; document.body.style.userSelect = ""; } };
-    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
-    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-  });
-  useEffect(() => { try { localStorage.setItem("hw_split_pct", String(splitPct)); } catch {} }, [splitPct]);
-  useEffect(() => { try { localStorage.setItem("hw_layout_w", String(layoutWidth)); } catch {} }, [layoutWidth]);
-
   // Global full-screen drag overlay
   useEffect(() => {
     function onDragEnter(e: DragEvent) { e.preventDefault(); globalDragCounter.current++; if (globalDragCounter.current === 1) setGlobalDragOver(true); }
@@ -424,7 +413,7 @@ export default function Home() {
 
   function addStudent() { if (!newName.trim()) { alert("请输入学生姓名"); return; } const s: Student = { id: uid(), name: newName.trim(), className: currentClass, images: [], imageUrls: [], ocrText: "", essayDetail: null, report: "", status: "idle" }; setStudents(prev => [...prev, s]); setActiveStudentId(s.id); setNewName(""); }
   function removeStudent(id: string) { const stu = students.find(s => s.id === id); deleteStudentImages(id, stu?.imageUrls.length || 10); setStudents(prev => { const next = prev.filter(s => s.id !== id); if (activeStudentId === id) { const fallback = next.find(s => !s.archived && s.className === currentClass); setActiveStudentId(fallback?.id || ""); } return next; }); setLoading(false); setProgress(0); setStepText(""); setBatchStatus(""); }
-  function archiveStudent(id: string) { setStudents(prev => { const next = prev.map(s => s.id === id ? { ...s, archived: true } : s); if (activeStudentId === id) { const fallback = next.find(s => !s.archived && s.className === currentClass && s.id !== id); setActiveStudentId(fallback?.id || ""); } return next; }); }
+  function archiveStudent(id: string) { setStudents(prev => { const next = prev.map(s => { if (s.id !== id) return s; const rec = s.status === "done" && s.essayDetail ? { date: new Date().toLocaleDateString("zh-CN"), topic, grade, essayDetail: s.essayDetail, imageUrls: [...s.imageUrls] } : null; const hist = [...(s.history || [])]; if (rec) hist.push(rec); return { ...s, archived: true, history: hist }; }); if (activeStudentId === id) { const fallback = next.find(s => !s.archived && s.className === currentClass && s.id !== id); setActiveStudentId(fallback?.id || ""); } return next; }); }
   function unarchiveStudent(id: string) { setStudents(prev => prev.map(s => s.id === id ? { ...s, archived: false } : s)); }
   function deleteClass(cn: string) { if (cn === "默认班") return; if (!confirm("确定删除班级「" + cn + "」？该班级下的学生将移至默认班。")) return; setStudents(prev => prev.map(s => s.className === cn ? { ...s, className: "默认班" } : s)); setClassNames(prev => prev.filter(c => c !== cn)); if (currentClass === cn) setCurrentClass("默认班"); }
 
@@ -559,6 +548,58 @@ export default function Home() {
   function copyAllDetail() { if (!activeStudent?.essayDetail) return; const d = activeStudent.essayDetail; let t = `【${activeStudent.name} 作文批改】\n\n━━ 批注 ━━\n`; (d.corrections || []).forEach((c: any, i: number) => { t += `${i + 1}. [${c.paragraph}] ${c.text}${c.suggested ? " → " + c.suggested : ""}\n`; }); if (d.model_suggestions?.length > 0) { t += `\n━━ 范文对比建议 ━━\n`; d.model_suggestions.forEach((s: any, i: number) => { t += `${i + 1}. [${s.paragraph}] ${s.suggestion}\n`; }); } t += `\n━━ 亮点 ━━\n`; (d.highlights || []).forEach((h: any, i: number) => { t += `${i + 1}. ${h.title}：${h.description}\n`; }); if (d.teacher_comment) t += `\n━━ 教师总评 ━━\n${d.teacher_comment}\n`; if (d.improvement_tips) { t += `\n━━ 改进方向 ━━\n`; d.improvement_tips.forEach((tip: string) => t += `${tip}\n`); } clipCopy(t, "已复制全部"); }
   function generateParentNotice() { if (!activeStudent?.essayDetail) return; const d = activeStudent.essayDetail; const name = activeStudent.name; let t = `【${name}作文反馈】\n✨ 亮点：${(d.highlights || []).map((h: any) => h.title).join("、")}\n📝 需改进${(d.corrections || []).filter((c: any) => c.type === "fix").length}处，已在作文上标注\n`; if (d.teacher_comment) t += `💬 ${d.teacher_comment}\n`; t += `请家长督促孩子看批注并改正，感谢配合！`; setParentNotice(t); }
 
+  const awardCanvasRef = useRef<HTMLCanvasElement>(null);
+  function drawAward() {
+    const cv = awardCanvasRef.current; if (!cv || !activeStudent?.essayDetail) return;
+    const ctx = cv.getContext("2d"); if (!ctx) return;
+    const W = 800, H = 560; cv.width = W; cv.height = H;
+    // Background
+    ctx.fillStyle = "#FFFEF5"; ctx.fillRect(0, 0, W, H);
+    // Border
+    const bd = 16; ctx.strokeStyle = "#C8A35A"; ctx.lineWidth = 4; ctx.strokeRect(bd, bd, W - bd * 2, H - bd * 2);
+    ctx.strokeStyle = "#E8C86A"; ctx.lineWidth = 2; ctx.strokeRect(bd + 8, bd + 8, W - bd * 2 - 16, H - bd * 2 - 16);
+    // Corner decorations
+    const corners = [[bd + 12, bd + 12], [W - bd - 12, bd + 12], [bd + 12, H - bd - 12], [W - bd - 12, H - bd - 12]];
+    for (const [cx, cy] of corners) { ctx.fillStyle = "#C8A35A"; ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill(); }
+    // Stars row
+    const starY = 60; ctx.fillStyle = "#E8C86A"; ctx.font = "24px serif";
+    ctx.textAlign = "center"; ctx.fillText("★  ★  ★  ★  ★", W / 2, starY);
+    // Title
+    ctx.fillStyle = "#8B1A1A"; ctx.font = "bold 48px 'Noto Sans SC','Microsoft YaHei',serif";
+    ctx.textAlign = "center"; ctx.fillText("奖  状", W / 2, 120);
+    // Divider
+    ctx.strokeStyle = "#C8A35A"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(200, 140); ctx.lineTo(600, 140); ctx.stroke();
+    // Name
+    ctx.fillStyle = "#333"; ctx.font = "bold 28px 'Noto Sans SC','Microsoft YaHei',sans-serif";
+    ctx.fillText(activeStudent.name + " 同学", W / 2, 195);
+    // Reason
+    const d = activeStudent.essayDetail;
+    const highlights = (d.highlights || []).map((h: any) => h.title).slice(0, 3);
+    let reason = "在本次作文中表现优异";
+    if (highlights.length > 0) reason += "，" + highlights.join("、");
+    reason += "，特此表彰！";
+    ctx.font = "20px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = "#444";
+    // Wrap reason text
+    const maxW = 620; const words = reason.split(""); let line = ""; let lines: string[] = []; 
+    for (const ch of words) { if (ctx.measureText(line + ch).width > maxW) { lines.push(line); line = ch; } else line += ch; }
+    if (line) lines.push(line);
+    const startY = 250;
+    for (let i = 0; i < lines.length; i++) { ctx.fillText(lines[i], W / 2, startY + i * 36); }
+    // Grade/Topic
+    ctx.font = "16px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = "#888";
+    ctx.fillText(grade + " · " + topic, W / 2, startY + lines.length * 36 + 20);
+    // Bottom info
+    ctx.textAlign = "right"; ctx.font = "16px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = "#666";
+    ctx.fillText("颁发日期：" + new Date().toLocaleDateString("zh-CN"), W - 60, H - 60);
+    // Seal circle
+    ctx.strokeStyle = "#C8A35A88"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(W - 120, H - 120, 40, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#C8A35A88"; ctx.font = "bold 14px sans-serif"; ctx.textAlign = "center"; ctx.fillText("优秀", W - 120, H - 124); ctx.fillText("作文", W - 120, H - 108);
+  }
+  function downloadAward() {
+    const cv = awardCanvasRef.current; if (!cv) return;
+    const link = document.createElement("a"); link.download = "奖状_" + (activeStudent?.name || "") + ".png"; link.href = cv.toDataURL("image/png"); link.click();
+  }
+
   function toggleBatchSelect(id: string) { setSelectedForBatch(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
   function selectAllForBatch() { const ids = classStudents.map(s => s.id); setSelectedForBatch(new Set(ids)); }
   function deselectAllForBatch() { setSelectedForBatch(new Set()); }
@@ -582,6 +623,21 @@ export default function Home() {
       {previewUrl && <div onClick={() => setPreviewUrl(null)} style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}><button onClick={() => setPreviewUrl(null)} style={{ position: "absolute", top: 20, right: 20, width: 44, height: 44, borderRadius: "50%", background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>✕</button><img src={previewUrl} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", objectFit: "contain", borderRadius: 8 }} /></div>}
       {copyMsg && <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: GREEN, color: "#fff", padding: "8px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>{copyMsg}</div>}
       {parentNotice && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 420, width: "90%" }}><h3 style={{ marginBottom: 12 }}>家长通知</h3><pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, background: "#f9f9f9", padding: 12, borderRadius: 8 }}>{parentNotice}</pre><div style={{ display: "flex", gap: 8, marginTop: 12 }}><button onClick={() => { clipCopy(parentNotice, "已复制通知"); }} style={{ flex: 1, padding: 8, borderRadius: 6, border: "none", background: GREEN, color: "#fff", cursor: "pointer", fontWeight: 600 }}>复制</button><button onClick={() => setParentNotice(null)} style={{ flex: 1, padding: 8, borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>关闭</button></div></div></div>}
+
+      {/* Award Modal */}
+      {showAward && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowAward(false)}>
+        <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 860, width: "95%", maxHeight: "90vh", overflow: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>🏆 生成奖状</h3>
+            <button onClick={() => setShowAward(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8E4", background: "#fff", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>✕</button>
+          </div>
+          <canvas ref={awardCanvasRef} style={{ width: "100%", borderRadius: 8, border: "1px solid #eee" }} />
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <button onClick={drawAward} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: ORANGE, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>生成预览</button>
+            <button onClick={downloadAward} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>下载奖状</button>
+          </div>
+        </div>
+      </div>}
 
       {/* Settings Modal */}
       {showSettings && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowSettings(false)}>
@@ -649,14 +705,7 @@ export default function Home() {
       </div>}
       {batchStatus && <div style={{ background: "#F0F7F2", padding: "10px 32px", fontSize: 14, fontWeight: 600, color: GREEN, borderBottom: "1px solid #D4E5D9" }}>{batchStatus}</div>}
 
-      <div style={{ maxWidth: layoutWidth > 0 ? layoutWidth : "none", margin: "0 auto", padding: "8px 20px", transition: "max-width 0.2s" }}>
-        {/* Layout width control - bottom right corner */}
-        {!isMobile && <div style={{ position: "fixed", bottom: 12, right: 12, zIndex: 999, display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 8, boxShadow: "0 1px 6px rgba(0,0,0,0.08)", border: "1px solid #E8E8E4", fontSize: 11, color: "#9CA3AF", backdropFilter: "blur(6px)" }}>
-          <span style={{ whiteSpace: "nowrap" }}>宽度</span>
-          <input type="range" min={800} max={Math.max(2400, typeof window !== "undefined" ? window.innerWidth : 2400)} step={50} value={layoutWidth > 0 ? layoutWidth : (typeof window !== "undefined" ? window.innerWidth : 1920)} onChange={e => setLayoutWidth(Number(e.target.value))} style={{ width: 80, height: 12, cursor: "pointer", accentColor: PRIMARY }} />
-          <span style={{ minWidth: 32, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{layoutWidth > 0 ? layoutWidth : "满"}</span>
-          {layoutWidth > 0 && <button onClick={() => setLayoutWidth(0)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#D1D5DB", fontSize: 12, padding: "0 2px" }} title="重置为铺满">✕</button>}
-        </div>}
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "8px 20px" }}>
         {tab !== "detail" && <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8E8E4", marginBottom: 10 }}><button style={tabStyle("upload")} onClick={() => setTab("upload")}>上传作业</button><button style={tabStyle("detail")} onClick={() => setTab("detail")}>批改详情</button><button style={tabStyle("archive")} onClick={() => setTab("archive")}>储存箱{students.filter(s => s.archived).length > 0 ? ` (${students.filter(s => s.archived).length})` : ""}</button></div>}
 
         {tab === "upload" && (
@@ -711,6 +760,14 @@ export default function Home() {
                   </div>
                 </div>
 
+                <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                  <div style={{ flex: 1, position: "relative" }}>
+                    <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索学生…" style={{ width: "100%", padding: "7px 12px 7px 30px", borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
+                    <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#D1D5DB", pointerEvents: "none" }}>🔍</span>
+                    {searchQuery && <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 14 }}>✕</button>}
+                  </div>
+                </div>
+
                 <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                   <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addStudent()} placeholder="输入学生姓名" style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 13, outline: "none" }} />
                   <button onClick={addStudent} style={{ padding: "8px 10px", borderRadius: 8, border: "none", background: PRIMARY, color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap", transition: "opacity 0.15s" }}>添加</button>
@@ -762,6 +819,7 @@ export default function Home() {
             <div style={{ display: "flex", gap: 6 }}>
               {activeStudent?.status === "done" && <button onClick={copyAllDetail} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>复制全部</button>}
               {activeStudent?.status === "done" && <button onClick={generateParentNotice} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>家长通知</button>}
+              {activeStudent?.status === "done" && <button onClick={() => setShowAward(true)} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + ORANGE, background: "transparent", color: ORANGE, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>🏆 奖状</button>}
             </div>
           </div>
           {!activeStudent && <div style={{ textAlign: "center", padding: "80px 20px" }}>
@@ -782,11 +840,11 @@ export default function Home() {
           </div>}
           {activeStudent && activeStudent.status === "error" && <div style={{ textAlign: "center", padding: "80px 20px" }}>
             <p style={{ fontSize: 16, fontWeight: 600, color: RED, marginBottom: 8 }}>{activeStudent.name} 批改出错</p>
-            <p style={{ fontSize: 13, color: "#D1D5DB" }}>{activeStudent.errorMsg || `请在「上传作业」页面重试`}</p>
+            <p style={{ fontSize: 13, color: "#D1D5DB" }}>{activeStudent.errorMsg || "请在「上传作业」页面重试"}</p>
           </div>}
-          {activeStudent?.status === "done" && <div id="detail-split" style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
+          {activeStudent?.status === "done" && <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
             {/* LEFT: Canvas */}
-            <div style={{ flex: isMobile ? "auto" : `0 0 ${splitPct}%`, display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <div style={{ flex: isMobile ? "auto" : "0 0 58%", display: "flex", flexDirection: "column" }}>
               {/* Canvas container with floating toolbars */}
               <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
                 {/* Floating toolbar - top */}
@@ -842,9 +900,6 @@ export default function Home() {
               {activeStudent.imageUrls.length > 1 && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "4px 0" }}><button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>← 上一页</button><span style={{ fontSize: 11, color: "#6B7280" }}>{"第 " + (pageIndex + 1) + " / " + activeStudent.imageUrls.length + " 页"}</span><button disabled={pageIndex >= activeStudent.imageUrls.length - 1} onClick={() => setPageIndex(i => i + 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>下一页 →</button></div>}
             </div>
 
-            {/* Draggable splitter */}
-            {!isMobile && <div onMouseDown={e => { e.preventDefault(); splitDrag.current = true; document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none"; }} style={{ width: 8, flexShrink: 0, cursor: "col-resize", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ width: 3, height: 36, borderRadius: 2, background: "#D1D5DB", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = PRIMARY)} onMouseLeave={e => (e.currentTarget.style.background = "#D1D5DB")} /></div>}
-
             {/* MIDDLE: Detail panel */}
             <div style={{ flex: 1, minWidth: 0, overflow: "auto", maxHeight: isMobile ? "none" : "calc(100vh - 100px)", padding: "0 12px" }}>
               {activeStudent.essayDetail ? <>
@@ -868,12 +923,17 @@ export default function Home() {
 
         {tab === "archive" && <div>
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#555" }}>储存箱 <span style={{ fontSize: 13, fontWeight: 400, color: "#999" }}>（已归档的批改记录）</span></h3>
-          {students.filter(s => s.archived).length === 0 ? (
-            <div style={{ textAlign: "center", padding: "60px 0", color: "#bbb" }}><p style={{ fontSize: 36 }}>—</p><p>储存箱是空的</p><p style={{ fontSize: 13 }}>批改完成的学生可以在列表里归档到这里</p></div>
+          <div style={{ marginBottom: 16, position: "relative", maxWidth: 300 }}>
+            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索学生…" style={{ width: "100%", padding: "7px 12px 7px 30px", borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#D1D5DB", pointerEvents: "none" }}>🔍</span>
+            {searchQuery && <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 14 }}>✕</button>}
+          </div>
+          {students.filter(s => s.archived && (!searchQuery || s.name.includes(searchQuery))).length === 0 ? (
+            <div style={{ textAlign: "center", padding: "60px 0", color: "#bbb" }}><p style={{ fontSize: 36 }}>—</p><p>{searchQuery ? "没有找到匹配的学生" : "储存箱是空的"}</p><p style={{ fontSize: 13 }}>批改完成的学生可以在列表里归档到这里</p></div>
           ) : (
             <div>
-              {Array.from(new Set(students.filter(s => s.archived).map(s => s.className || "默认班"))).map(cn => {
-                const classArchived = students.filter(s => s.archived && (s.className || "默认班") === cn);
+              {Array.from(new Set(students.filter(s => s.archived && (!searchQuery || s.name.includes(searchQuery))).map(s => s.className || "默认班"))).map(cn => {
+                const classArchived = students.filter(s => s.archived && (s.className || "默认班") === cn && (!searchQuery || s.name.includes(searchQuery)));
                 if (classArchived.length === 0) return null;
                 return (<div key={cn} style={{ marginBottom: 20 }}>
                   <h4 style={{ fontSize: 14, fontWeight: 600, color: PRIMARY, marginBottom: 10, borderBottom: "1px solid #eee", paddingBottom: 6 }}>{cn} <span style={{ fontSize: 12, fontWeight: 400, color: "#999" }}>({classArchived.length}人)</span></h4>
@@ -882,6 +942,15 @@ export default function Home() {
                       <div key={s.id} style={{ background: "#fff", borderRadius: 12, border: "1px solid #eee", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span style={{ fontWeight: 700, fontSize: 15 }}>{s.name}</span><span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: s.status === "done" ? GREEN : "#eee", color: s.status === "done" ? "#fff" : "#999" }}>{s.status === "done" ? "已批改" : s.status}</span></div>
                         {s.essayDetail?.teacher_comment && <p style={{ fontSize: 12, color: "#888", lineHeight: 1.6, margin: 0 }}>{s.essayDetail.teacher_comment.slice(0, 80)}...</p>}
+                        {(s.history?.length || 0) > 0 && <div style={{ fontSize: 11, color: PRIMARY, fontWeight: 600 }}>📋 {s.history!.length} 次批改记录</div>}
+                        {s.history && s.history.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 120, overflowY: "auto" }}>
+                          {s.history.map((h, i) => (
+                            <div key={i} style={{ fontSize: 11, padding: "4px 8px", borderRadius: 4, background: "#f8f8f6", border: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ color: "#666" }}>{h.date} · {h.grade} · {h.topic}</span>
+                              <button onClick={() => { setPreviewUrl(null); const detail = h.essayDetail; if (detail?.teacher_comment) { alert("总评：" + detail.teacher_comment.slice(0, 200)); } }} style={{ background: "none", border: "none", cursor: "pointer", color: PRIMARY, fontSize: 10, fontWeight: 600 }}>查看</button>
+                            </div>
+                          ))}
+                        </div>}
                         <div style={{ fontSize: 12, color: "#aaa" }}>{s.imageUrls.length} 张照片</div>
                         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
                           <button onClick={() => { unarchiveStudent(s.id); setActiveStudentId(s.id); setCurrentClass(s.className || "默认班"); setTab("upload"); }} style={{ flex: 1, padding: "7px 0", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>↩ 取回</button>

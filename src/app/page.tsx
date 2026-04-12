@@ -144,7 +144,6 @@ export default function Home() {
   const [splitPercent, setSplitPercent] = useState(58);
   const splitDragging = useRef(false);
   const splitContainerRef = useRef<HTMLDivElement>(null);
-  const [canvasFit, setCanvasFit] = useState(false);
 
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -638,30 +637,31 @@ export default function Home() {
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>奖状生成工具</h3>
             <button onClick={() => setShowAward(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8E4", background: "#fff", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>✕</button>
           </div>
-          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 16px", lineHeight: 1.6 }}>推荐使用以下专业在线奖状生成器，模板丰富、效果精美，点击即可跳转使用：</p>
+          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 12px", lineHeight: 1.6 }}>点击跳转使用，或编辑管理工具列表：</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {toolboxItems.filter(t => t.folder === "奖状生成").map(site => (
-              <a key={site.id} href={site.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#fff", textDecoration: "none", color: "#374151", transition: "all 0.15s", cursor: "pointer" }} onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = PRIMARY_MID; (e.currentTarget as HTMLAnchorElement).style.background = PRIMARY_LIGHT; }} onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#E8E8E4"; (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}>
-                <span style={{ fontSize: 28, flexShrink: 0, width: 40, textAlign: "center" }}>{site.icon}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{site.name}</p>
-                  <p style={{ margin: "2px 0 0", fontSize: 11, color: "#9CA3AF", lineHeight: 1.4 }}>{site.desc}</p>
-                </div>
-                <span style={{ fontSize: 16, color: "#D1D5DB", flexShrink: 0 }}>→</span>
-              </a>
-            ))}
-            {toolboxItems.filter(t => t.folder === "奖状生成").length === 0 && DEFAULT_TOOLBOX.filter(t => t.folder === "奖状生成").map(site => (
-              <a key={site.id} href={site.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#fff", textDecoration: "none", color: "#374151", transition: "all 0.15s", cursor: "pointer" }} onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = PRIMARY_MID; (e.currentTarget as HTMLAnchorElement).style.background = PRIMARY_LIGHT; }} onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#E8E8E4"; (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}>
-                <span style={{ fontSize: 28, flexShrink: 0, width: 40, textAlign: "center" }}>{site.icon}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{site.name}</p>
-                  <p style={{ margin: "2px 0 0", fontSize: 11, color: "#9CA3AF", lineHeight: 1.4 }}>{site.desc}</p>
-                </div>
-                <span style={{ fontSize: 16, color: "#D1D5DB", flexShrink: 0 }}>→</span>
-              </a>
+            {(toolboxItems.filter(t => t.folder === "奖状生成").length > 0 ? toolboxItems.filter(t => t.folder === "奖状生成") : DEFAULT_TOOLBOX.filter(t => t.folder === "奖状生成")).map(site => (
+              <div key={site.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <a href={site.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, border: "1px solid #E8E8E4", background: "#fff", textDecoration: "none", color: "#374151", transition: "all 0.15s" }} onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = PRIMARY_MID; (e.currentTarget as HTMLAnchorElement).style.background = PRIMARY_LIGHT; }} onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#E8E8E4"; (e.currentTarget as HTMLAnchorElement).style.background = "#fff"; }}>
+                  <span style={{ fontSize: 24, flexShrink: 0, width: 32, textAlign: "center" }}>{site.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{site.name}</p>
+                    {site.desc && <p style={{ margin: "1px 0 0", fontSize: 10, color: "#9CA3AF" }}>{site.desc}</p>}
+                  </div>
+                  <span style={{ fontSize: 14, color: "#D1D5DB", flexShrink: 0 }}>→</span>
+                </a>
+                <button onClick={() => { if (confirm("删除「" + site.name + "」？")) removeToolboxItem(site.id); }} style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid #FECACA", background: "#FEF2F2", color: RED, fontSize: 12, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+              </div>
             ))}
           </div>
-          <p style={{ fontSize: 11, color: "#9CA3AF", margin: "12px 0 0", textAlign: "center" }}>可在工具箱中管理和添加更多奖状工具</p>
+          {/* Quick add in award modal */}
+          <div style={{ marginTop: 12, padding: 12, borderRadius: 8, border: "1px dashed #D1D5DB", background: "#FAFAF8" }}>
+            <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 600, color: "#6B7280" }}>添加奖状工具</p>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input value={tbAddName} onChange={e => setTbAddName(e.target.value)} placeholder="名称" style={{ flex: 1, padding: "5px 8px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+              <input value={tbAddUrl} onChange={e => setTbAddUrl(e.target.value)} placeholder="网址" style={{ flex: 2, padding: "5px 8px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 12, outline: "none" }} />
+              <button onClick={() => { if (tbAddName.trim() && tbAddUrl.trim()) { let url = tbAddUrl.trim(); if (!url.startsWith("http")) url = "https://" + url; setToolboxItems(prev => [...prev, { id: uid(), name: tbAddName.trim(), url, icon: "🏆", folder: "奖状生成", desc: tbAddDesc.trim() || undefined }]); setTbAddName(""); setTbAddUrl(""); setTbAddDesc(""); } }} disabled={!tbAddName.trim() || !tbAddUrl.trim()} style={{ padding: "5px 14px", borderRadius: 6, border: "none", background: !tbAddName.trim() || !tbAddUrl.trim() ? "#D1D5DB" : PRIMARY, color: "#fff", fontSize: 12, cursor: !tbAddName.trim() || !tbAddUrl.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>添加</button>
+            </div>
+          </div>
         </div>
       </div>}
 
@@ -964,7 +964,7 @@ export default function Home() {
           </div>}
           {activeStudent?.status === "done" && <div ref={splitContainerRef} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 0 }}>
             <div style={{ flex: isMobile ? "auto" : `0 0 ${splitPercent}%`, display: "flex", flexDirection: "column" }}>
-              <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: canvasFit ? "hidden" : "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
+              <div id="canvas-wrap" style={{ position: "relative", maxHeight: "calc(100vh - 100px)", overflow: "auto", background: "#eee", borderRadius: 10, border: "1px solid #E8E8E4" }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
                 <div style={{ position: "sticky", top: 0, zIndex: 20, padding: "4px 6px", display: "flex", flexDirection: "column", gap: 3 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "rgba(255,255,255,0.95)", borderRadius: 10, backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", flexWrap: "nowrap", overflowX: "auto" }}>
                     {toolDefs.map(t => (<button key={t.k} onClick={() => { setTool(t.k); setTextPos(null); setPendingStamp(null); setMovingIdx(-1); }} title={t.l} style={{ width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer", background: tool === t.k && !pendingStamp ? PRIMARY : "transparent", color: tool === t.k && !pendingStamp ? "#fff" : "#6B7280", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{t.ic}</button>))}
@@ -1006,7 +1006,7 @@ export default function Home() {
                 </div>
                 {activeStudent.imageUrls[pageIndex] && <div style={{ position: "relative", background: "#fff", display: "inline-block", minWidth: "100%" }}>
                   {padTop > 0 && <div style={{ height: padTop, background: "#fff" }} />}
-                  <div style={{ display: "flex" }}>{padLeft > 0 && <div style={{ width: padLeft, flexShrink: 0, background: "#fff" }} />}<img ref={imgRef} src={activeStudent.imageUrls[pageIndex]} alt="" style={{ maxWidth: "100%", width: canvasFit ? "100%" : "auto", display: "block" }} onLoad={syncCanvas} onDragStart={e => e.preventDefault()} />{padRight > 0 && <div style={{ width: padRight, flexShrink: 0, background: "#fff" }} />}</div>
+                  <div style={{ display: "flex" }}>{padLeft > 0 && <div style={{ width: padLeft, flexShrink: 0, background: "#fff" }} />}<img ref={imgRef} src={activeStudent.imageUrls[pageIndex]} alt="" style={{ maxWidth: "100%", width: "auto", display: "block" }} onLoad={syncCanvas} onDragStart={e => e.preventDefault()} />{padRight > 0 && <div style={{ width: padRight, flexShrink: 0, background: "#fff" }} />}</div>
                   {padBot > 0 && <div style={{ height: padBot, background: "#fff" }} />}
                   <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, cursor: movingIdx >= 0 ? "grabbing" : pendingStamp ? "copy" : tool === "hand" ? (handDragging ? "grabbing" : "grab") : tool === "text" ? "text" : tool === "eraser" ? "pointer" : tool === "penEraser" ? "crosshair" : "crosshair" }} onMouseDown={mDown} onMouseMove={mMove} onMouseUp={mUp} onDoubleClick={mDblClick} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()} onMouseLeave={() => { if (isDrawing) { setIsDrawing(false); redraw(); } if (handDragging) setHandDragging(false); setHoverIdx(-1); }} />
                   {movingIdx >= 0 && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(45,74,62,0.9)", color: "#fff", padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, zIndex: 30, pointerEvents: "none" }}>移动中 · 单击放置 · Esc取消</div>}
@@ -1014,9 +1014,11 @@ export default function Home() {
                 </div>}
               </div>
               {activeStudent.imageUrls.length > 1 && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "4px 0" }}><button disabled={pageIndex <= 0} onClick={() => setPageIndex(i => i - 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>← 上一页</button><span style={{ fontSize: 11, color: "#6B7280" }}>{"第 " + (pageIndex + 1) + " / " + activeStudent.imageUrls.length + " 页"}</span><button disabled={pageIndex >= activeStudent.imageUrls.length - 1} onClick={() => setPageIndex(i => i + 1)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", fontSize: 11 }}>下一页 →</button></div>}
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, padding: "4px 0" }}>
-                <button onClick={() => { setCanvasFit(!canvasFit); setTimeout(syncCanvas, 50); }} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: canvasFit ? PRIMARY_LIGHT : "#fff", color: canvasFit ? PRIMARY : "#6B7280", fontSize: 11, fontWeight: 500 }}>{canvasFit ? "原始大小" : "适应屏幕"}</button>
-                {splitPercent !== 58 && <button onClick={() => setSplitPercent(58)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", color: "#6B7280", fontSize: 11, fontWeight: 500 }}>重置比例</button>}
+              <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, padding: "4px 0" }}>
+                <span style={{ fontSize: 10, color: "#9CA3AF" }}>宽度</span>
+                <input type="range" min={30} max={80} value={splitPercent} onChange={e => setSplitPercent(Number(e.target.value))} style={{ width: 80, height: 14, cursor: "pointer", accentColor: PRIMARY }} />
+                <span style={{ fontSize: 10, color: "#9CA3AF", minWidth: 28 }}>{splitPercent}%</span>
+                {splitPercent !== 58 && <button onClick={() => setSplitPercent(58)} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #E0E0DC", cursor: "pointer", background: "#fff", color: "#9CA3AF", fontSize: 10 }}>重置</button>}
               </div>
             </div>
 

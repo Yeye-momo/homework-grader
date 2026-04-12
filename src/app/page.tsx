@@ -112,6 +112,13 @@ export default function Home() {
   const [customEpFast, setCustomEpFast] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAward, setShowAward] = useState(false);
+  const [awardTemplate, setAwardTemplate] = useState(0);
+  const [awardTitle, setAwardTitle] = useState("作文之星");
+  const [awardName, setAwardName] = useState("");
+  const [awardReason, setAwardReason] = useState("");
+  const [awardTeacher, setAwardTeacher] = useState("");
+  const [expandedArchiveId, setExpandedArchiveId] = useState<string | null>(null);
+  const [archiveDetailId, setArchiveDetailId] = useState<string | null>(null);
 
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -549,55 +556,89 @@ export default function Home() {
   function generateParentNotice() { if (!activeStudent?.essayDetail) return; const d = activeStudent.essayDetail; const name = activeStudent.name; let t = `【${name}作文反馈】\n✨ 亮点：${(d.highlights || []).map((h: any) => h.title).join("、")}\n📝 需改进${(d.corrections || []).filter((c: any) => c.type === "fix").length}处，已在作文上标注\n`; if (d.teacher_comment) t += `💬 ${d.teacher_comment}\n`; t += `请家长督促孩子看批注并改正，感谢配合！`; setParentNotice(t); }
 
   const awardCanvasRef = useRef<HTMLCanvasElement>(null);
-  function drawAward() {
-    const cv = awardCanvasRef.current; if (!cv || !activeStudent?.essayDetail) return;
-    const ctx = cv.getContext("2d"); if (!ctx) return;
-    const W = 800, H = 560; cv.width = W; cv.height = H;
-    // Background
-    ctx.fillStyle = "#FFFEF5"; ctx.fillRect(0, 0, W, H);
-    // Border
-    const bd = 16; ctx.strokeStyle = "#C8A35A"; ctx.lineWidth = 4; ctx.strokeRect(bd, bd, W - bd * 2, H - bd * 2);
-    ctx.strokeStyle = "#E8C86A"; ctx.lineWidth = 2; ctx.strokeRect(bd + 8, bd + 8, W - bd * 2 - 16, H - bd * 2 - 16);
-    // Corner decorations
-    const corners = [[bd + 12, bd + 12], [W - bd - 12, bd + 12], [bd + 12, H - bd - 12], [W - bd - 12, H - bd - 12]];
-    for (const [cx, cy] of corners) { ctx.fillStyle = "#C8A35A"; ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill(); }
-    // Stars row
-    const starY = 60; ctx.fillStyle = "#E8C86A"; ctx.font = "24px serif";
-    ctx.textAlign = "center"; ctx.fillText("★  ★  ★  ★  ★", W / 2, starY);
-    // Title
-    ctx.fillStyle = "#8B1A1A"; ctx.font = "bold 48px 'Noto Sans SC','Microsoft YaHei',serif";
-    ctx.textAlign = "center"; ctx.fillText("奖  状", W / 2, 120);
-    // Divider
-    ctx.strokeStyle = "#C8A35A"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(200, 140); ctx.lineTo(600, 140); ctx.stroke();
-    // Name
-    ctx.fillStyle = "#333"; ctx.font = "bold 28px 'Noto Sans SC','Microsoft YaHei',sans-serif";
-    ctx.fillText(activeStudent.name + " 同学", W / 2, 195);
-    // Reason
+  const AWARD_TEMPLATES = [
+    { name: "经典红金", bg: ["#DC2626","#F59E0B"], border: "#C8A35A", titleColor: "#8B0000", textColor: "#4A1A00", accent: "#D4A017" },
+    { name: "清新绿", bg: ["#065F46","#10B981"], border: "#2D8C5A", titleColor: "#064E3B", textColor: "#1F4037", accent: "#34D399" },
+    { name: "蓝色庄重", bg: ["#1E3A5F","#3B82F6"], border: "#4A7AB5", titleColor: "#1E3A8A", textColor: "#1E293B", accent: "#60A5FA" },
+    { name: "紫金尊贵", bg: ["#581C87","#A855F7"], border: "#9333EA", titleColor: "#4C1D95", textColor: "#3B0764", accent: "#C084FC" },
+  ];
+  function openAwardModal() {
+    if (!activeStudent?.essayDetail) return;
     const d = activeStudent.essayDetail;
-    const highlights = (d.highlights || []).map((h: any) => h.title).slice(0, 3);
-    let reason = "在本次作文中表现优异";
-    if (highlights.length > 0) reason += "，" + highlights.join("、");
-    reason += "，特此表彰！";
-    ctx.font = "20px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = "#444";
-    // Wrap reason text
-    const maxW = 620; const words = reason.split(""); let line = ""; let lines: string[] = []; 
-    for (const ch of words) { if (ctx.measureText(line + ch).width > maxW) { lines.push(line); line = ch; } else line += ch; }
-    if (line) lines.push(line);
-    const startY = 250;
-    for (let i = 0; i < lines.length; i++) { ctx.fillText(lines[i], W / 2, startY + i * 36); }
-    // Grade/Topic
-    ctx.font = "16px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = "#888";
-    ctx.fillText(grade + " · " + topic, W / 2, startY + lines.length * 36 + 20);
-    // Bottom info
-    ctx.textAlign = "right"; ctx.font = "16px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = "#666";
-    ctx.fillText("颁发日期：" + new Date().toLocaleDateString("zh-CN"), W - 60, H - 60);
-    // Seal circle
-    ctx.strokeStyle = "#C8A35A88"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(W - 120, H - 120, 40, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = "#C8A35A88"; ctx.font = "bold 14px sans-serif"; ctx.textAlign = "center"; ctx.fillText("优秀", W - 120, H - 124); ctx.fillText("作文", W - 120, H - 108);
+    const hl = (d.highlights || []).map((h: any) => h.title).slice(0, 3);
+    setAwardName(activeStudent.name);
+    setAwardReason(hl.length > 0 ? "在本次作文中" + hl.join("、") + "，表现优异！" : "在本次作文中表现优异，特此表彰！");
+    if (!awardTeacher) setAwardTeacher("");
+    setShowAward(true);
+    setTimeout(() => drawAward(), 100);
+  }
+  function drawAward() {
+    const cv = awardCanvasRef.current; if (!cv) return;
+    const ctx = cv.getContext("2d"); if (!ctx) return;
+    const W = 900, H = 620; cv.width = W; cv.height = H;
+    const t = AWARD_TEMPLATES[awardTemplate] || AWARD_TEMPLATES[0];
+    // Background gradient
+    const grd = ctx.createLinearGradient(0, 0, W, H);
+    grd.addColorStop(0, t.bg[0]); grd.addColorStop(1, t.bg[1]);
+    ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
+    // Inner cream panel
+    const m = 30;
+    ctx.fillStyle = "rgba(255,255,248,0.92)"; 
+    ctx.beginPath();
+    const r = 12; ctx.moveTo(m + r, m); ctx.lineTo(W - m - r, m); ctx.arcTo(W - m, m, W - m, m + r, r); ctx.lineTo(W - m, H - m - r); ctx.arcTo(W - m, H - m, W - m - r, H - m, r); ctx.lineTo(m + r, H - m); ctx.arcTo(m, H - m, m, H - m - r, r); ctx.lineTo(m, m + r); ctx.arcTo(m, m, m + r, m, r); ctx.fill();
+    // Decorative border
+    ctx.strokeStyle = t.border; ctx.lineWidth = 3; ctx.strokeRect(m + 10, m + 10, W - m * 2 - 20, H - m * 2 - 20);
+    ctx.strokeStyle = t.border + "66"; ctx.lineWidth = 1; ctx.strokeRect(m + 16, m + 16, W - m * 2 - 32, H - m * 2 - 32);
+    // Corner ornaments
+    const cSize = 20;
+    [[m + 14, m + 14], [W - m - 14, m + 14], [m + 14, H - m - 14], [W - m - 14, H - m - 14]].forEach(([cx, cy]) => {
+      ctx.save(); ctx.translate(cx, cy);
+      ctx.strokeStyle = t.border; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-cSize, 0); ctx.lineTo(0, 0); ctx.lineTo(0, -cSize); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cSize, 0); ctx.lineTo(0, 0); ctx.lineTo(0, cSize); ctx.stroke();
+      ctx.fillStyle = t.accent; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+    // Top decorative line
+    ctx.strokeStyle = t.border; ctx.lineWidth = 1;
+    const topY = m + 50;
+    ctx.beginPath(); ctx.moveTo(m + 60, topY); ctx.lineTo(W / 2 - 80, topY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W / 2 + 80, topY); ctx.lineTo(W - m - 60, topY); ctx.stroke();
+    // Stars
+    ctx.fillStyle = t.accent; ctx.font = "28px serif"; ctx.textAlign = "center";
+    ctx.fillText("✦", W / 2 - 50, topY + 8); ctx.fillText("✦", W / 2, topY + 8); ctx.fillText("✦", W / 2 + 50, topY + 8);
+    // Title
+    ctx.fillStyle = t.titleColor; ctx.font = "bold 52px 'Noto Sans SC','Microsoft YaHei',serif";
+    ctx.textAlign = "center"; ctx.fillText(awardTitle, W / 2, topY + 75);
+    // Divider under title
+    ctx.strokeStyle = t.border; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 120, topY + 90); ctx.lineTo(W / 2 + 120, topY + 90); ctx.stroke();
+    // Name line
+    ctx.fillStyle = t.textColor; ctx.font = "bold 26px 'Noto Sans SC','Microsoft YaHei',sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(awardName + " 同学：", m + 80, topY + 145);
+    // Reason text - wrap
+    ctx.font = "22px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = t.textColor;
+    const maxTW = W - m * 2 - 160; let rLine = ""; const rLines: string[] = [];
+    for (const ch of awardReason) { if (ctx.measureText(rLine + ch).width > maxTW) { rLines.push(rLine); rLine = ch; } else rLine += ch; }
+    if (rLine) rLines.push(rLine);
+    for (let i = 0; i < rLines.length; i++) ctx.fillText(rLines[i], m + 80, topY + 190 + i * 38);
+    // Bottom text
+    ctx.fillStyle = t.textColor; ctx.font = "italic 20px 'Noto Sans SC','Microsoft YaHei',sans-serif";
+    ctx.textAlign = "left"; ctx.fillText("特发此状，以资鼓励。", m + 80, H - m - 110);
+    // Teacher & date
+    ctx.textAlign = "right"; ctx.font = "20px 'Noto Sans SC','Microsoft YaHei',sans-serif"; ctx.fillStyle = t.textColor;
+    if (awardTeacher) ctx.fillText(awardTeacher, W - m - 70, H - m - 75);
+    ctx.fillText(new Date().toLocaleDateString("zh-CN"), W - m - 70, H - m - 45);
+    // Seal
+    ctx.save(); ctx.translate(W - m - 130, H - m - 100);
+    ctx.strokeStyle = t.accent + "99"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, 0, 32, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = t.accent + "99"; ctx.font = "bold 13px 'Noto Sans SC',sans-serif"; ctx.textAlign = "center"; ctx.fillText("优秀", 0, -4); ctx.fillText("作文", 0, 14);
+    ctx.restore();
   }
   function downloadAward() {
     const cv = awardCanvasRef.current; if (!cv) return;
-    const link = document.createElement("a"); link.download = "奖状_" + (activeStudent?.name || "") + ".png"; link.href = cv.toDataURL("image/png"); link.click();
+    const link = document.createElement("a"); link.download = "奖状_" + awardName + ".png"; link.href = cv.toDataURL("image/png"); link.click();
   }
 
   function toggleBatchSelect(id: string) { setSelectedForBatch(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
@@ -626,14 +667,28 @@ export default function Home() {
 
       {/* Award Modal */}
       {showAward && <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowAward(false)}>
-        <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 860, width: "95%", maxHeight: "90vh", overflow: "auto" }}>
+        <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 920, width: "95%", maxHeight: "90vh", overflow: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1F2937" }}>🏆 生成奖状</h3>
             <button onClick={() => setShowAward(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8E4", background: "#fff", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>✕</button>
           </div>
+          {/* Template selector */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {AWARD_TEMPLATES.map((t, i) => (
+              <button key={i} onClick={() => { setAwardTemplate(i); setTimeout(drawAward, 50); }} style={{ padding: "6px 14px", borderRadius: 6, border: awardTemplate === i ? "2px solid " + t.border : "1px solid #E0E0DC", background: awardTemplate === i ? `linear-gradient(135deg, ${t.bg[0]}22, ${t.bg[1]}22)` : "#fff", color: awardTemplate === i ? t.border : "#6B7280", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t.name}</button>
+            ))}
+          </div>
+          {/* Editable fields */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+            <div><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>奖项名称</label><input value={awardTitle} onChange={e => setAwardTitle(e.target.value)} style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
+            <div><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>学生姓名</label><input value={awardName} onChange={e => setAwardName(e.target.value)} style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
+            <div style={{ gridColumn: "1 / -1" }}><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>获奖理由</label><textarea value={awardReason} onChange={e => setAwardReason(e.target.value)} rows={2} style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} /></div>
+            <div><label style={{ fontSize: 11, color: "#9CA3AF", display: "block", marginBottom: 3 }}>颁发人</label><input value={awardTeacher} onChange={e => setAwardTeacher(e.target.value)} placeholder="如：XX老师" style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E0E0DC", fontSize: 13, outline: "none", boxSizing: "border-box" }} /></div>
+          </div>
+          {/* Preview */}
           <canvas ref={awardCanvasRef} style={{ width: "100%", borderRadius: 8, border: "1px solid #eee" }} />
-          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <button onClick={drawAward} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: ORANGE, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>生成预览</button>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button onClick={drawAward} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: ORANGE, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>刷新预览</button>
             <button onClick={downloadAward} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>下载奖状</button>
           </div>
         </div>
@@ -819,7 +874,7 @@ export default function Home() {
             <div style={{ display: "flex", gap: 6 }}>
               {activeStudent?.status === "done" && <button onClick={copyAllDetail} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>复制全部</button>}
               {activeStudent?.status === "done" && <button onClick={generateParentNotice} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + GREEN, background: "transparent", color: GREEN, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>家长通知</button>}
-              {activeStudent?.status === "done" && <button onClick={() => setShowAward(true)} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + ORANGE, background: "transparent", color: ORANGE, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>🏆 奖状</button>}
+              {activeStudent?.status === "done" && <button onClick={openAwardModal} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + ORANGE, background: "transparent", color: ORANGE, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>🏆 奖状</button>}
             </div>
           </div>
           {!activeStudent && <div style={{ textAlign: "center", padding: "80px 20px" }}>
@@ -922,7 +977,9 @@ export default function Home() {
         </div>}
 
         {tab === "archive" && <div>
-          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#555" }}>储存箱 <span style={{ fontSize: 13, fontWeight: 400, color: "#999" }}>（已归档的批改记录）</span></h3>
+          {!archiveDetailId ? <>
+          {/* LIST VIEW */}
+          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#555" }}>储存箱 <span style={{ fontSize: 13, fontWeight: 400, color: "#999" }}>（学生作文档案）</span></h3>
           <div style={{ marginBottom: 16, position: "relative", maxWidth: 300 }}>
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索学生…" style={{ width: "100%", padding: "7px 12px 7px 30px", borderRadius: 8, border: "1px solid #E0E0DC", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
             <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#D1D5DB", pointerEvents: "none" }}>🔍</span>
@@ -935,35 +992,83 @@ export default function Home() {
               {Array.from(new Set(students.filter(s => s.archived && (!searchQuery || s.name.includes(searchQuery))).map(s => s.className || "默认班"))).map(cn => {
                 const classArchived = students.filter(s => s.archived && (s.className || "默认班") === cn && (!searchQuery || s.name.includes(searchQuery)));
                 if (classArchived.length === 0) return null;
+                const nameGroups: Record<string, typeof classArchived> = {};
+                for (const s of classArchived) { if (!nameGroups[s.name]) nameGroups[s.name] = []; nameGroups[s.name].push(s); }
                 return (<div key={cn} style={{ marginBottom: 20 }}>
-                  <h4 style={{ fontSize: 14, fontWeight: 600, color: PRIMARY, marginBottom: 10, borderBottom: "1px solid #eee", paddingBottom: 6 }}>{cn} <span style={{ fontSize: 12, fontWeight: 400, color: "#999" }}>({classArchived.length}人)</span></h4>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-                    {classArchived.map(s => (
-                      <div key={s.id} style={{ background: "#fff", borderRadius: 12, border: "1px solid #eee", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span style={{ fontWeight: 700, fontSize: 15 }}>{s.name}</span><span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: s.status === "done" ? GREEN : "#eee", color: s.status === "done" ? "#fff" : "#999" }}>{s.status === "done" ? "已批改" : s.status}</span></div>
-                        {s.essayDetail?.teacher_comment && <p style={{ fontSize: 12, color: "#888", lineHeight: 1.6, margin: 0 }}>{s.essayDetail.teacher_comment.slice(0, 80)}...</p>}
-                        {(s.history?.length || 0) > 0 && <div style={{ fontSize: 11, color: PRIMARY, fontWeight: 600 }}>📋 {s.history!.length} 次批改记录</div>}
-                        {s.history && s.history.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 120, overflowY: "auto" }}>
-                          {s.history.map((h, i) => (
-                            <div key={i} style={{ fontSize: 11, padding: "4px 8px", borderRadius: 4, background: "#f8f8f6", border: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span style={{ color: "#666" }}>{h.date} · {h.grade} · {h.topic}</span>
-                              <button onClick={() => { setPreviewUrl(null); const detail = h.essayDetail; if (detail?.teacher_comment) { alert("总评：" + detail.teacher_comment.slice(0, 200)); } }} style={{ background: "none", border: "none", cursor: "pointer", color: PRIMARY, fontSize: 10, fontWeight: 600 }}>查看</button>
-                            </div>
-                          ))}
-                        </div>}
-                        <div style={{ fontSize: 12, color: "#aaa" }}>{s.imageUrls.length} 张照片</div>
-                        <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-                          <button onClick={() => { unarchiveStudent(s.id); setActiveStudentId(s.id); setCurrentClass(s.className || "默认班"); setTab("upload"); }} style={{ flex: 1, padding: "7px 0", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>↩ 取回</button>
-                          <button onClick={() => { unarchiveStudent(s.id); setActiveStudentId(s.id); setTab("detail"); }} style={{ flex: 1, padding: "7px 0", borderRadius: 6, border: "1px solid #ddd", background: "#fff", color: "#666", fontSize: 12, cursor: "pointer" }}>👁 查看</button>
-                          <button onClick={() => { if (confirm("确定永久删除 " + s.name + " 的所有数据？")) removeStudent(s.id); }} style={{ padding: "7px 12px", borderRadius: 6, border: "1px solid #f0c0c0", background: "#fef2f2", color: RED, fontSize: 12, cursor: "pointer" }}>🗑</button>
+                  <h4 style={{ fontSize: 14, fontWeight: 600, color: PRIMARY, marginBottom: 10, borderBottom: "1px solid #eee", paddingBottom: 6 }}>{cn} <span style={{ fontSize: 12, fontWeight: 400, color: "#999" }}>({Object.keys(nameGroups).length}人)</span></h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+                    {Object.entries(nameGroups).map(([name, stuList]) => {
+                      const totalRecords = stuList.reduce((sum, s) => sum + (s.history?.length || 0), 0) || stuList.length;
+                      const latestComment = stuList[stuList.length - 1]?.essayDetail?.teacher_comment;
+                      return (<div key={name} onClick={() => setArchiveDetailId(name + "___" + cn)} style={{ background: "#fff", borderRadius: 10, border: "1px solid #eee", padding: "14px 16px", cursor: "pointer", transition: "all 0.15s", display: "flex", flexDirection: "column", gap: 6 }} onMouseEnter={e => { e.currentTarget.style.borderColor = PRIMARY_MID; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "#eee"; e.currentTarget.style.boxShadow = "none"; }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontWeight: 700, fontSize: 15 }}>{name}</span>
+                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: GREEN, color: "#fff" }}>{totalRecords} 次</span>
                         </div>
-                      </div>
-                    ))}
+                        {latestComment && <p style={{ fontSize: 11, color: "#999", lineHeight: 1.5, margin: 0, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{latestComment.slice(0, 60)}</p>}
+                        <span style={{ fontSize: 11, color: PRIMARY, fontWeight: 500 }}>查看档案 →</span>
+                      </div>);
+                    })}
                   </div>
                 </div>);
               })}
             </div>
           )}
+          </> : (() => {
+            /* DETAIL VIEW */
+            const [detailName, detailClass] = archiveDetailId.split("___");
+            const detailStudents = students.filter(s => s.archived && s.name === detailName && (s.className || "默认班") === detailClass);
+            const allHistory = detailStudents.flatMap(s => (s.history || []).map(h => ({ ...h, studentId: s.id })));
+            return <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                <button onClick={() => setArchiveDetailId(null)} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #E0E0DC", background: "#fff", color: "#6B7280", fontSize: 12, cursor: "pointer" }}>← 返回</button>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#1F2937" }}>{detailName} 的作文档案</h3>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9CA3AF" }}>{detailClass} · 共 {allHistory.length} 次批改记录</p>
+                </div>
+              </div>
+              {detailStudents.map(s => s.essayDetail?.teacher_comment ? (
+                <div key={s.id} style={{ background: "#fff", borderRadius: 10, border: "1px solid #eee", padding: 16, marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#555" }}>最近一次批改</span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => { unarchiveStudent(s.id); setActiveStudentId(s.id); setTab("detail"); setArchiveDetailId(null); }} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid #ddd", background: "#fff", color: "#666", fontSize: 11, cursor: "pointer" }}>查看详情</button>
+                      <button onClick={() => { unarchiveStudent(s.id); setActiveStudentId(s.id); setCurrentClass(s.className || "默认班"); setTab("upload"); setArchiveDetailId(null); }} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + PRIMARY, background: "transparent", color: PRIMARY, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>取回</button>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 13, color: "#555", lineHeight: 1.8, margin: 0 }}>{s.essayDetail.teacher_comment}</p>
+                  {s.essayDetail.highlights?.length > 0 && <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                    {s.essayDetail.highlights.map((h: any, i: number) => (<span key={i} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 12, background: GREEN + "15", color: GREEN, border: "1px solid " + GREEN + "33" }}>{h.title}</span>))}
+                  </div>}
+                </div>
+              ) : null)}
+              {allHistory.length > 0 && <div>
+                <h4 style={{ fontSize: 14, fontWeight: 600, color: "#555", marginBottom: 12 }}>历史记录</h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {allHistory.map((h, i) => (
+                    <div key={i} style={{ background: "#fff", borderRadius: 10, border: "1px solid #eee", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>{h.date}</span>
+                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: PRIMARY_LIGHT, color: PRIMARY }}>{h.grade} · {h.topic}</span>
+                        </div>
+                        <span style={{ fontSize: 11, color: "#D1D5DB" }}>#{allHistory.length - i}</span>
+                      </div>
+                      {h.essayDetail?.teacher_comment && <p style={{ fontSize: 12, color: "#666", lineHeight: 1.7, margin: 0 }}>{h.essayDetail.teacher_comment}</p>}
+                      {h.essayDetail?.highlights?.length > 0 && <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {h.essayDetail.highlights.slice(0, 5).map((hl: any, hi: number) => (<span key={hi} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: GREEN + "12", color: GREEN }}>{hl.title}</span>))}
+                      </div>}
+                      {h.essayDetail?.improvement_tips?.length > 0 && <div style={{ fontSize: 11, color: "#999", lineHeight: 1.6 }}>改进：{h.essayDetail.improvement_tips.slice(0, 2).join("；")}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>}
+              {allHistory.length === 0 && <p style={{ textAlign: "center", color: "#D1D5DB", padding: "40px 0", fontSize: 13 }}>暂无历史批改记录</p>}
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #eee" }}>
+                <button onClick={() => { if (confirm("确定永久删除 " + detailName + " 的所有归档数据？")) { detailStudents.forEach(s => removeStudent(s.id)); setArchiveDetailId(null); } }} style={{ padding: "8px 20px", borderRadius: 6, border: "1px solid #f0c0c0", background: "#fef2f2", color: RED, fontSize: 12, cursor: "pointer" }}>🗑 删除该学生所有归档数据</button>
+              </div>
+            </div>;
+          })()}
         </div>}
       </div>
     </div>
